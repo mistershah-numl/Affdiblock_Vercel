@@ -7,8 +7,7 @@ import { verifyToken } from "@/lib/api/auth"
 // GET user profile
 export async function GET(request: Request) {
   try {
-    // Get authorization header
-    const headersList = headers()
+    const headersList = await headers()
     const authorization = headersList.get("Authorization")
 
     if (!authorization || !authorization.startsWith("Bearer ")) {
@@ -18,22 +17,37 @@ export async function GET(request: Request) {
     const token = authorization.split(" ")[1]
     const tokenResult = verifyToken(token)
 
-    if (!tokenResult.success) {
+    if (!tokenResult.success || !tokenResult.decoded) {
       return NextResponse.json({ success: false, error: "Invalid token" }, { status: 401 })
     }
 
-    // Connect to database
     await dbConnect()
 
-    // Find user by ID
     const user = await User.findById(tokenResult.decoded.id).select("-password")
 
     if (!user) {
       return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
     }
 
-    // Return user data
-    return NextResponse.json({ success: true, user })
+    return NextResponse.json({
+      success: true,
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        idCardNumber: user.idCardNumber,
+        idCardFrontUrl: user.idCardFrontUrl,
+        idCardBackUrl: user.idCardBackUrl,
+        address: user.address,
+        bio: user.bio,
+        walletAddress: user.walletAddress,
+        role: user.role,
+        status: user.status,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+      },
+    })
   } catch (error) {
     console.error("Error fetching user profile:", error)
     return NextResponse.json({ success: false, error: "Internal server error" }, { status: 500 })
@@ -43,8 +57,7 @@ export async function GET(request: Request) {
 // PUT update user profile
 export async function PUT(request: Request) {
   try {
-    // Get authorization header
-    const headersList = headers()
+    const headersList = await headers()
     const authorization = headersList.get("Authorization")
 
     if (!authorization || !authorization.startsWith("Bearer ")) {
@@ -54,34 +67,33 @@ export async function PUT(request: Request) {
     const token = authorization.split(" ")[1]
     const tokenResult = verifyToken(token)
 
-    if (!tokenResult.success) {
+    if (!tokenResult.success || !tokenResult.decoded) {
       return NextResponse.json({ success: false, error: "Invalid token" }, { status: 401 })
     }
 
-    // Parse request body
     const body = await request.json()
-    const { name, phone, address, bio } = body
+    const { name, phone, address, bio, walletAddress } = body
 
-    // Connect to database
     await dbConnect()
 
-    // Find user by ID
     const user = await User.findById(tokenResult.decoded.id)
 
     if (!user) {
       return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
     }
 
-    // Update user data
+    if (walletAddress && !/^0x[a-fA-F0-9]{40}$/.test(walletAddress)) {
+      return NextResponse.json({ success: false, error: "Invalid wallet address" }, { status: 400 })
+    }
+
     if (name) user.name = name
     if (phone) user.phone = phone
     if (address) user.address = address
     if (bio) user.bio = bio
+    if (walletAddress) user.walletAddress = walletAddress
 
-    // Save updated user
     await user.save()
 
-    // Return updated user data
     return NextResponse.json({
       success: true,
       user: {
@@ -89,10 +101,16 @@ export async function PUT(request: Request) {
         name: user.name,
         email: user.email,
         phone: user.phone,
+        idCardNumber: user.idCardNumber,
+        idCardFrontUrl: user.idCardFrontUrl,
+        idCardBackUrl: user.idCardBackUrl,
         address: user.address,
         bio: user.bio,
+        walletAddress: user.walletAddress,
         role: user.role,
         status: user.status,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
       },
     })
   } catch (error) {

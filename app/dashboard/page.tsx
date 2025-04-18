@@ -1,35 +1,38 @@
-"use client";
+"use client"
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import Link from "next/link";
-import { FileText, FilePlus, Clock, CheckCircle, XCircle, AlertCircle, Search } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import DashboardLayout from "@/components/dashboard-layout";
-import CreateAffidavitDialog from "@/components/create-affidavit-dialog";
-import { useAuth } from "@/lib/auth-context";
+import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
+import Link from "next/link"
+import dynamic from "next/dynamic"
+import { FileText, FilePlus, Clock, CheckCircle, XCircle, AlertCircle, Search } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Input } from "@/components/ui/input"
+import { Badge } from "@/components/ui/badge"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import DashboardLayout from "@/components/dashboard-layout"
+import { useAuth } from "@/lib/auth-context"
+
+const CreateAffidavitDialog = dynamic(() => import("@/components/create-affidavit-dialog"), {
+  ssr: false,
+  loading: () => <div>Loading affidavit dialog...</div>,
+})
 
 export default function DashboardPage() {
-  const { user, token, isAuthenticated, isLoading, verifyTokenClientSide, logout } = useAuth();
-  const router = useRouter();
+  const { user, token, isAuthenticated, isLoading, verifyTokenClientSide, logout } = useAuth()
+  const router = useRouter()
 
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState("")
 
-  // Client-side authentication check
   useEffect(() => {
     if (!isLoading && (!isAuthenticated || !token || !verifyTokenClientSide())) {
-      console.log("Client-side auth failed, redirecting to login");
-      router.push("/login");
+      console.log("Client-side auth failed, redirecting to login")
+      router.push("/login")
     }
-  }, [isLoading, isAuthenticated, token, verifyTokenClientSide, router]);
+  }, [isLoading, isAuthenticated, token, verifyTokenClientSide, router])
 
-  // Mock data for dashboard
   const stats = [
     {
       title: "Total Affidavits",
@@ -59,7 +62,7 @@ export default function DashboardPage() {
       change: "-1 from last month",
       trend: "down",
     },
-  ];
+  ]
 
   const recentAffidavits = [
     {
@@ -102,24 +105,24 @@ export default function DashboardPage() {
       status: "Active",
       parties: "Alex Martin, Olivia Moore",
     },
-  ];
+  ]
 
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "Active":
-        return <Badge className="bg-green-500">Active</Badge>;
+        return <Badge className="bg-green-500">Active</Badge>
       case "Pending":
         return (
           <Badge variant="outline" className="text-orange-500 border-orange-500">
             Pending
           </Badge>
-        );
+        )
       case "Rejected":
-        return <Badge variant="destructive">Rejected</Badge>;
+        return <Badge variant="destructive">Rejected</Badge>
       default:
-        return <Badge variant="secondary">{status}</Badge>;
+        return <Badge variant="secondary">{status}</Badge>
     }
-  };
+  }
 
   const filteredAffidavits = recentAffidavits.filter(
     (affidavit) =>
@@ -127,18 +130,18 @@ export default function DashboardPage() {
       affidavit.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
       affidavit.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
       affidavit.parties.toLowerCase().includes(searchQuery.toLowerCase()),
-  );
+  )
 
   const handleLogout = () => {
-    logout();
-  };
+    logout()
+  }
 
   if (isLoading) {
-    return <div>Loading...</div>;
+    return <div>Loading...</div>
   }
 
   if (!isAuthenticated || !user) {
-    return null;
+    return null
   }
 
   return (
@@ -258,5 +261,5 @@ export default function DashboardPage() {
 
       <CreateAffidavitDialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen} />
     </DashboardLayout>
-  );
+  )
 }

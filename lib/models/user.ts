@@ -1,5 +1,5 @@
-import mongoose from "mongoose";
-import bcrypt from "bcryptjs";
+import mongoose from "mongoose"
+import bcrypt from "bcryptjs"
 
 const UserSchema = new mongoose.Schema(
   {
@@ -11,7 +11,7 @@ const UserSchema = new mongoose.Schema(
     email: {
       type: String,
       required: [true, "Please provide an email"],
-      unique: true, // Creates unique index
+      unique: true,
       trim: true,
       lowercase: true,
       match: [/^\S+@\S+\.\S+$/, "Please provide a valid email"],
@@ -24,7 +24,7 @@ const UserSchema = new mongoose.Schema(
     idCardNumber: {
       type: String,
       required: [true, "Please provide an ID card number"],
-      unique: true, // Creates unique index
+      unique: true,
       trim: true,
     },
     idCardFrontUrl: {
@@ -34,6 +34,26 @@ const UserSchema = new mongoose.Schema(
     idCardBackUrl: {
       type: String,
       required: [true, "Please provide ID card back image"],
+    },
+    phone: {
+      type: String,
+      trim: true,
+      match: [/^\+?\d{10,15}$/, "Please provide a valid phone number"],
+    },
+    address: {
+      type: String,
+      trim: true,
+    },
+    bio: {
+      type: String,
+      trim: true,
+      maxlength: [500, "Bio cannot exceed 500 characters"],
+    },
+    walletAddress: {
+      type: String,
+      trim: true,
+      match: [/^0x[a-fA-F0-9]{40}$/, "Please provide a valid Ethereum address"],
+      sparse: true,
     },
     role: {
       type: String,
@@ -49,30 +69,26 @@ const UserSchema = new mongoose.Schema(
   {
     timestamps: true,
   }
-);
-
-// Remove these lines to avoid duplicate indexes
-// UserSchema.index({ email: 1 });
-// UserSchema.index({ idCardNumber: 1 });
+)
 
 // Hash password before saving
 UserSchema.pre("save", async function (next) {
   if (!this.isModified("password")) {
-    return next();
+    return next()
   }
 
   try {
-    const salt = await bcrypt.genSalt(10); // Optimal salt rounds
-    this.password = await bcrypt.hash(this.password, salt);
-    next();
+    const salt = await bcrypt.genSalt(10)
+    this.password = await bcrypt.hash(this.password, salt)
+    next()
   } catch (error) {
-    next(error as Error);
+    next(error as Error)
   }
-});
+})
 
 // Method to compare password
 UserSchema.methods.comparePassword = async function (candidatePassword: string): Promise<boolean> {
-  return bcrypt.compare(candidatePassword, this.password);
-};
+  return bcrypt.compare(candidatePassword, this.password)
+}
 
-export default mongoose.models.User || mongoose.model("User", UserSchema);
+export default mongoose.models.User || mongoose.model("User", UserSchema)

@@ -8,7 +8,7 @@ import bcrypt from "bcryptjs"
 export async function POST(request: Request) {
   try {
     // Get authorization header
-    const headersList = headers()
+    const headersList = await headers()
     const authorization = headersList.get("Authorization")
 
     if (!authorization || !authorization.startsWith("Bearer ")) {
@@ -18,7 +18,7 @@ export async function POST(request: Request) {
     const token = authorization.split(" ")[1]
     const tokenResult = verifyToken(token)
 
-    if (!tokenResult.success) {
+    if (!tokenResult.success || !tokenResult.decoded) {
       return NextResponse.json({ success: false, error: "Invalid token" }, { status: 401 })
     }
 
@@ -30,7 +30,7 @@ export async function POST(request: Request) {
     if (!currentPassword || !newPassword) {
       return NextResponse.json(
         { success: false, error: "Current password and new password are required" },
-        { status: 400 },
+        { status: 400 }
       )
     }
 

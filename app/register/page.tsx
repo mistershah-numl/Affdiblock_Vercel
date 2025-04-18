@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useState, useRef, useEffect } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -49,12 +48,9 @@ export default function RegisterPage() {
   const idCardFrontRef = useRef<HTMLInputElement>(null)
   const idCardBackRef = useRef<HTMLInputElement>(null)
 
-  // Format ID card number as user types (11111-1111111-1)
   useEffect(() => {
     const formatIdCardNumber = (value: string) => {
-      // Remove all non-numeric characters
       const numericValue = value.replace(/\D/g, "")
-
       if (numericValue.length <= 5) {
         return numericValue
       } else if (numericValue.length <= 12) {
@@ -63,45 +59,21 @@ export default function RegisterPage() {
         return `${numericValue.slice(0, 5)}-${numericValue.slice(5, 12)}-${numericValue.slice(12, 13)}`
       }
     }
-
     setFormattedIdCardNumber(formatIdCardNumber(idCardNumber))
   }, [idCardNumber])
 
-  // Check password strength and requirements
   useEffect(() => {
     const errors: string[] = []
     let strength = 0
-
     if (password) {
-      // Check for minimum length
-      if (password.length >= 8) {
-        strength += 25
-      } else {
-        errors.push("Password must be at least 8 characters long")
-      }
-
-      // Check for uppercase letter
-      if (/[A-Z]/.test(password)) {
-        strength += 25
-      } else {
-        errors.push("Password must contain at least one uppercase letter")
-      }
-
-      // Check for number
-      if (/\d/.test(password)) {
-        strength += 25
-      } else {
-        errors.push("Password must contain at least one number")
-      }
-
-      // Check for special character
-      if (/[^A-Za-z0-9]/.test(password)) {
-        strength += 25
-      } else {
-        errors.push("Password must contain at least one special character")
-      }
-
-      // Check if password contains part of the name
+      if (password.length >= 8) strength += 25
+      else errors.push("Password must be at least 8 characters long")
+      if (/[A-Z]/.test(password)) strength += 25
+      else errors.push("Password must contain at least one uppercase letter")
+      if (/\d/.test(password)) strength += 25
+      else errors.push("Password must contain at least one number")
+      if (/[^A-Za-z0-9]/.test(password)) strength += 25
+      else errors.push("Password must contain at least one special character")
       if (name && name.length > 2) {
         const nameParts = name.toLowerCase().split(" ")
         for (const part of nameParts) {
@@ -113,13 +85,11 @@ export default function RegisterPage() {
         }
       }
     }
-
     setPasswordStrength(strength)
     setPasswordErrors(errors)
   }, [password, name])
 
   const handleIdCardNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // Allow only numbers and limit to 13 digits
     const value = e.target.value.replace(/\D/g, "").slice(0, 13)
     setIdCardNumber(value)
   }
@@ -128,8 +98,6 @@ export default function RegisterPage() {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0]
       setIdCardFront(file)
-
-      // Create preview
       const reader = new FileReader()
       reader.onload = (event) => {
         setIdCardFrontPreview(event.target?.result as string)
@@ -142,8 +110,6 @@ export default function RegisterPage() {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0]
       setIdCardBack(file)
-
-      // Create preview
       const reader = new FileReader()
       reader.onload = (event) => {
         setIdCardBackPreview(event.target?.result as string)
@@ -162,50 +128,17 @@ export default function RegisterPage() {
       idCardFront?: string
       idCardBack?: string
     } = {}
-
-    // Validate name
-    if (!name.trim()) {
-      errors.name = "Full name is required"
-    }
-
-    // Validate email
-    if (!email.trim()) {
-      errors.email = "Email is required"
-    } else if (!/\S+@\S+\.\S+/.test(email)) {
-      errors.email = "Email is invalid"
-    }
-
-    // Validate password
-    if (!password) {
-      errors.password = "Password is required"
-    } else if (passwordErrors.length > 0) {
-      errors.password = "Password does not meet requirements"
-    }
-
-    // Validate confirm password
-    if (!confirmPassword) {
-      errors.confirmPassword = "Please confirm your password"
-    } else if (password !== confirmPassword) {
-      errors.confirmPassword = "Passwords do not match"
-    }
-
-    // Validate ID card number
-    if (!idCardNumber) {
-      errors.idCardNumber = "ID card number is required"
-    } else if (idCardNumber.replace(/\D/g, "").length !== 13) {
-      errors.idCardNumber = "ID card number must be 13 digits"
-    }
-
-    // Validate ID card front image
-    if (!idCardFront) {
-      errors.idCardFront = "ID card front image is required"
-    }
-
-    // Validate ID card back image
-    if (!idCardBack) {
-      errors.idCardBack = "ID card back image is required"
-    }
-
+    if (!name.trim()) errors.name = "Full name is required"
+    if (!email.trim()) errors.email = "Email is required"
+    else if (!/\S+@\S+\.\S+/.test(email)) errors.email = "Email is invalid"
+    if (!password) errors.password = "Password is required"
+    else if (passwordErrors.length > 0) errors.password = "Password does not meet requirements"
+    if (!confirmPassword) errors.confirmPassword = "Please confirm your password"
+    else if (password !== confirmPassword) errors.confirmPassword = "Passwords do not match"
+    if (!idCardNumber) errors.idCardNumber = "ID card number is required"
+    else if (idCardNumber.replace(/\D/g, "").length !== 13) errors.idCardNumber = "ID card number must be 13 digits"
+    if (!idCardFront) errors.idCardFront = "ID card front image is required"
+    if (!idCardBack) errors.idCardBack = "ID card back image is required"
     setFormErrors(errors)
     return Object.keys(errors).length === 0
   }
@@ -213,39 +146,23 @@ export default function RegisterPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
-
-    if (!validateForm()) {
-      return
-    }
-
+    if (!validateForm()) return
     setIsLoading(true)
-
     try {
-      // Create form data for multipart/form-data submission
       const formData = new FormData()
       formData.append("name", name)
       formData.append("email", email)
       formData.append("password", password)
       formData.append("idCardNumber", idCardNumber)
-
-      // Append files
-      if (idCardFront) {
-        formData.append("idCardFront", idCardFront)
-      }
-
-      if (idCardBack) {
-        formData.append("idCardBack", idCardBack)
-      }
-
-      // Register user
+      if (idCardFront) formData.append("idCardFront", idCardFront)
+      if (idCardBack) formData.append("idCardBack", idCardBack)
       const result = await register(formData)
-
       if (result.success) {
         toast({
           title: "Registration successful",
-          description: "Welcome to AffidBlock!",
+          description: "Please log in to access your account.",
         })
-        router.push("/dashboard")
+        router.push("/login")
       } else {
         setError(result.error || "Registration failed")
       }
@@ -278,7 +195,6 @@ export default function RegisterPage() {
       <div className="absolute top-4 right-4">
         <ThemeToggle />
       </div>
-
       <div className="w-full max-w-xl">
         <Card className="border-none shadow-xl dark:bg-gray-800/60 dark:backdrop-blur-sm">
           <CardHeader className="space-y-1">
@@ -294,13 +210,7 @@ export default function RegisterPage() {
                 <p className="text-red-600 dark:text-red-400 text-sm">{error}</p>
               </div>
             )}
-
-            <form 
-            onSubmit={(e)=>{
-              console.log("Form Submitted");
-              handleSubmit(e);
-            }} 
-            className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="name">Full Name</Label>
                 <div className="relative">
@@ -319,7 +229,6 @@ export default function RegisterPage() {
                   </p>
                 )}
               </div>
-
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
                 <div className="relative">
@@ -339,7 +248,6 @@ export default function RegisterPage() {
                   </p>
                 )}
               </div>
-
               <div className="space-y-2">
                 <Label htmlFor="password">Password</Label>
                 <div className="relative">
@@ -386,7 +294,6 @@ export default function RegisterPage() {
                   </p>
                 )}
               </div>
-
               <div className="space-y-2">
                 <Label htmlFor="confirmPassword">Confirm Password</Label>
                 <div className="relative">
@@ -413,7 +320,6 @@ export default function RegisterPage() {
                   </p>
                 )}
               </div>
-
               <div className="space-y-2">
                 <Label htmlFor="idCardNumber">ID Card Number</Label>
                 <div className="relative">
@@ -434,14 +340,13 @@ export default function RegisterPage() {
                   </p>
                 )}
               </div>
-
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="idCardFront">ID Card Front</Label>
                   <div
                     className={cn(
                       "border-2 border-dashed rounded-lg p-4 text-center cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors",
-                      formErrors.idCardFront ? "border-red-500" : "border-gray-300 dark:border-gray-600",
+                      formErrors.idCardFront ? "border-red-500" : "border-gray-300 dark:border-gray-600"
                     )}
                     onClick={() => idCardFrontRef.current?.click()}
                   >
@@ -453,7 +358,6 @@ export default function RegisterPage() {
                       className="hidden"
                       onChange={handleIdCardFrontUpload}
                     />
-
                     {idCardFrontPreview ? (
                       <div className="relative">
                         <img
@@ -486,13 +390,12 @@ export default function RegisterPage() {
                     </p>
                   )}
                 </div>
-
                 <div className="space-y-2">
                   <Label htmlFor="idCardBack">ID Card Back</Label>
                   <div
                     className={cn(
                       "border-2 border-dashed rounded-lg p-4 text-center cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors",
-                      formErrors.idCardBack ? "border-red-500" : "border-gray-300 dark:border-gray-600",
+                      formErrors.idCardBack ? "border-red-500" : "border-gray-300 dark:border-gray-600"
                     )}
                     onClick={() => idCardBackRef.current?.click()}
                   >
@@ -504,7 +407,6 @@ export default function RegisterPage() {
                       className="hidden"
                       onChange={handleIdCardBackUpload}
                     />
-
                     {idCardBackPreview ? (
                       <div className="relative">
                         <img
@@ -538,7 +440,6 @@ export default function RegisterPage() {
                   )}
                 </div>
               </div>
-
               <div className="flex items-center space-x-2">
                 <Checkbox id="terms" required />
                 <Label htmlFor="terms" className="text-sm font-normal">
@@ -552,12 +453,10 @@ export default function RegisterPage() {
                   </Link>
                 </Label>
               </div>
-
               <Button type="submit" className="w-full" disabled={isLoading}>
                 {isLoading ? "Creating account..." : "Create account"}
               </Button>
             </form>
-
             <div className="mt-4 text-center text-sm">
               <span className="text-gray-500 dark:text-gray-400">Already have an account?</span>{" "}
               <Link href="/login" className="text-primary font-medium hover:underline">

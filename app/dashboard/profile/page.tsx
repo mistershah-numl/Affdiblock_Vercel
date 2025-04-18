@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -13,11 +12,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Separator } from "@/components/ui/separator"
 import { Badge } from "@/components/ui/badge"
-import { Loader2, Save, Upload, Shield, Key } from "lucide-react"
+import { Loader2, Save, Upload, Shield, Key, Wallet } from "lucide-react"
 import DashboardLayout from "@/components/dashboard-layout"
 import { useAuth } from "@/lib/auth-context"
 import { ProtectedRoute } from "@/components/protected-route"
 import { toast } from "@/components/ui/use-toast"
+import Image from "next/image"
 
 export default function ProfilePage() {
   const router = useRouter()
@@ -30,9 +30,9 @@ export default function ProfilePage() {
     idCardNumber: "",
     address: "",
     bio: "",
+    walletAddress: "",
   })
 
-  // Load user data when component mounts
   useEffect(() => {
     if (user) {
       setFormData({
@@ -42,13 +42,13 @@ export default function ProfilePage() {
         idCardNumber: user.idCardNumber || "",
         address: user.address || "",
         bio: user.bio || "",
+        walletAddress: user.walletAddress || "",
       })
     }
   }, [user])
 
   const handleSaveProfile = async () => {
     setIsLoading(true)
-
     try {
       const response = await fetch("/api/user/profile", {
         method: "PUT",
@@ -61,13 +61,11 @@ export default function ProfilePage() {
           phone: formData.phone,
           address: formData.address,
           bio: formData.bio,
+          walletAddress: formData.walletAddress,
         }),
       })
-
       const data = await response.json()
-
       if (data.success) {
-        // Update user in context
         updateUser(data.user)
         toast({
           title: "Profile updated",
@@ -94,10 +92,7 @@ export default function ProfilePage() {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }))
+    setFormData((prev) => ({ ...prev, [name]: value }))
   }
 
   const [currentPassword, setCurrentPassword] = useState("")
@@ -114,9 +109,7 @@ export default function ProfilePage() {
       })
       return
     }
-
     setIsChangingPassword(true)
-
     try {
       const response = await fetch("/api/user/change-password", {
         method: "POST",
@@ -129,9 +122,7 @@ export default function ProfilePage() {
           newPassword,
         }),
       })
-
       const data = await response.json()
-
       if (data.success) {
         toast({
           title: "Password updated",
@@ -159,6 +150,10 @@ export default function ProfilePage() {
     }
   }
 
+  if (!user) {
+    return <div>Loading user data...</div>
+  }
+
   return (
     <ProtectedRoute>
       <DashboardLayout>
@@ -167,36 +162,30 @@ export default function ProfilePage() {
             <h1 className="text-3xl font-bold tracking-tight">Profile</h1>
             <p className="text-gray-500">Manage your account settings and profile information</p>
           </div>
-
           <Tabs defaultValue="profile" className="w-full">
             <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="profile">Profile</TabsTrigger>
               <TabsTrigger value="account">Account</TabsTrigger>
               <TabsTrigger value="security">Security</TabsTrigger>
             </TabsList>
-
             <TabsContent value="profile" className="mt-6 space-y-6">
               <Card>
                 <CardHeader>
                   <CardTitle>Profile Information</CardTitle>
-                  <CardDescription>Update your profile information and personal details</CardDescription>
+                  <CardDescription>View and update your profile details</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
                   <div className="flex flex-col md:flex-row gap-6">
                     <div className="flex flex-col items-center space-y-4">
                       <Avatar className="h-32 w-32">
-                        <AvatarImage
-                          src={user?.avatar || "/placeholder.svg?height=128&width=128"}
-                          alt={user?.name || ""}
-                        />
-                        <AvatarFallback className="text-2xl">{user?.name?.charAt(0) || "U"}</AvatarFallback>
+                        <AvatarImage src={user.avatar || "/placeholder.svg?height=128&width=128"} alt={user.name || ""} />
+                        <AvatarFallback className="text-2xl">{user.name?.charAt(0) || "U"}</AvatarFallback>
                       </Avatar>
                       <Button variant="outline" size="sm" className="flex items-center gap-2">
                         <Upload className="h-4 w-4" />
                         <span>Change Photo</span>
                       </Button>
                     </div>
-
                     <div className="flex-1 space-y-4">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="space-y-2">
@@ -216,7 +205,6 @@ export default function ProfilePage() {
                           <p className="text-xs text-gray-500">Email cannot be changed</p>
                         </div>
                       </div>
-
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="space-y-2">
                           <Label htmlFor="phone">Phone Number</Label>
@@ -234,7 +222,23 @@ export default function ProfilePage() {
                           <p className="text-xs text-gray-500">ID Card Number cannot be changed</p>
                         </div>
                       </div>
-
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="walletAddress">Wallet Address</Label>
+                          <Input
+                            id="walletAddress"
+                            name="walletAddress"
+                            value={formData.walletAddress}
+                            onChange={handleInputChange}
+                            placeholder="0x..."
+                          />
+                          <p className="text-xs text-gray-500">Your Ethereum wallet address</p>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="status">Account Status</Label>
+                          <Input id="status" value={user.status || "N/A"} disabled />
+                        </div>
+                      </div>
                       <div className="space-y-2">
                         <Label htmlFor="address">Address</Label>
                         <Textarea
@@ -245,7 +249,6 @@ export default function ProfilePage() {
                           rows={3}
                         />
                       </div>
-
                       <div className="space-y-2">
                         <Label htmlFor="bio">Bio</Label>
                         <Textarea
@@ -256,6 +259,58 @@ export default function ProfilePage() {
                           placeholder="Tell us about yourself"
                           rows={4}
                         />
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>ID Card Front</Label>
+                          {user.idCardFrontUrl ? (
+                            <div className="relative h-48 w-full">
+                              <Image
+                                src={user.idCardFrontUrl}
+                                alt="ID Card Front"
+                                fill
+                                style={{ objectFit: "contain" }}
+                                className="rounded-md"
+                              />
+                            </div>
+                          ) : (
+                            <p className="text-gray-500">No image uploaded</p>
+                          )}
+                        </div>
+                        <div className="space-y-2">
+                          <Label>ID Card Back</Label>
+                          {user.idCardBackUrl ? (
+                            <div className="relative h-48 w-full">
+                              <Image
+                                src={user.idCardBackUrl}
+                                alt="ID Card Back"
+                                fill
+                                style={{ objectFit: "contain" }}
+                                className="rounded-md"
+                              />
+                            </div>
+                          ) : (
+                            <p className="text-gray-500">No image uploaded</p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="createdAt">Created At</Label>
+                          <Input
+                            id="createdAt"
+                            value={user.createdAt ? new Date(user.createdAt).toLocaleString() : "N/A"}
+                            disabled
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="updatedAt">Last Updated</Label>
+                          <Input
+                            id="updatedAt"
+                            value={user.updatedAt ? new Date(user.updatedAt).toLocaleString() : "N/A"}
+                            disabled
+                          />
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -277,7 +332,6 @@ export default function ProfilePage() {
                 </CardFooter>
               </Card>
             </TabsContent>
-
             <TabsContent value="account" className="mt-6 space-y-6">
               <Card>
                 <CardHeader>
@@ -291,11 +345,11 @@ export default function ProfilePage() {
                         <h3 className="text-lg font-medium">Account Status</h3>
                         <p className="text-sm text-gray-500">Your account is active and in good standing</p>
                       </div>
-                      <Badge className="bg-green-500">Active</Badge>
+                      <Badge className={user.status === "Active" ? "bg-green-500" : "bg-red-500"}>
+                        {user.status || "Active"}
+                      </Badge>
                     </div>
-
                     <Separator />
-
                     <div className="flex items-center justify-between">
                       <div>
                         <h3 className="text-lg font-medium">Account Role</h3>
@@ -303,11 +357,10 @@ export default function ProfilePage() {
                       </div>
                       <div className="flex items-center gap-2">
                         <Shield className="h-5 w-5 text-purple-500" />
-                        <span className="font-medium">{user?.role}</span>
+                        <span className="font-medium">{user.role}</span>
                       </div>
                     </div>
-
-                    {user?.role === "User" && (
+                    {user.role === "User" && (
                       <>
                         <Separator />
                         <div>
@@ -323,7 +376,6 @@ export default function ProfilePage() {
                   </div>
                 </CardContent>
               </Card>
-
               <Card>
                 <CardHeader>
                   <CardTitle>Delete Account</CardTitle>
@@ -338,7 +390,6 @@ export default function ProfilePage() {
                 </CardContent>
               </Card>
             </TabsContent>
-
             <TabsContent value="security" className="mt-6 space-y-6">
               <Card>
                 <CardHeader>
@@ -390,7 +441,6 @@ export default function ProfilePage() {
                   </Button>
                 </CardFooter>
               </Card>
-
               <Card>
                 <CardHeader>
                   <CardTitle>Two-Factor Authentication</CardTitle>

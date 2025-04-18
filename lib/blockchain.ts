@@ -1,7 +1,8 @@
 // This is a simplified mock implementation of blockchain interactions
 // In a real application, this would connect to an actual blockchain network
 
-import { ethers, JsonRpcProvider } from "ethers";
+import { ethers } from "ethers"
+
 // Mock ABI for the smart contract
 const contractABI = [
   "function issueAffidavit(string memory id, string memory dataHash) public returns (bool)",
