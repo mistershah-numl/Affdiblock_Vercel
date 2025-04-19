@@ -65,6 +65,10 @@ const UserSchema = new mongoose.Schema(
       enum: ["Active", "Inactive", "Pending", "Banned"],
       default: "Active",
     },
+    avatar: {
+      type: String,
+      trim: true,
+    },
   },
   {
     timestamps: true,
@@ -76,7 +80,6 @@ UserSchema.pre("save", async function (next) {
   if (!this.isModified("password")) {
     return next()
   }
-
   try {
     const salt = await bcrypt.genSalt(10)
     this.password = await bcrypt.hash(this.password, salt)

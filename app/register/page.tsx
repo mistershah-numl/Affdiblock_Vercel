@@ -44,6 +44,7 @@ export default function RegisterPage() {
     idCardBack?: string
   }>({})
   const [error, setError] = useState<string | null>(null)
+  const [isRegistered, setIsRegistered] = useState(false)
 
   const idCardFrontRef = useRef<HTMLInputElement>(null)
   const idCardBackRef = useRef<HTMLInputElement>(null)
@@ -89,6 +90,25 @@ export default function RegisterPage() {
     setPasswordErrors(errors)
   }, [password, name])
 
+  // Redirect after successful registration
+  useEffect(() => {
+    if (isRegistered) {
+      const timer = setTimeout(() => {
+        try {
+          router.push("/login")
+        } catch (err) {
+          console.error("Navigation error:", err)
+          toast({
+            title: "Error",
+            description: "Failed to redirect to login page. Please navigate manually.",
+            variant: "destructive",
+          })
+        }
+      }, 2000) // Delay to show toast
+      return () => clearTimeout(timer)
+    }
+  }, [isRegistered, router])
+
   const handleIdCardNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value.replace(/\D/g, "").slice(0, 13)
     setIdCardNumber(value)
@@ -97,6 +117,14 @@ export default function RegisterPage() {
   const handleIdCardFrontUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0]
+      if (file.size > 5 * 1024 * 1024) {
+        toast({ title: "Error", description: "Image size must be less than 5MB", variant: "destructive" })
+        return
+      }
+      if (!file.type.startsWith("image/")) {
+        toast({ title: "Error", description: "Please upload an image file", variant: "destructive" })
+        return
+      }
       setIdCardFront(file)
       const reader = new FileReader()
       reader.onload = (event) => {
@@ -109,6 +137,14 @@ export default function RegisterPage() {
   const handleIdCardBackUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0]
+      if (file.size > 5 * 1024 * 1024) {
+        toast({ title: "Error", description: "Image size must be less than 5MB", variant: "destructive" })
+        return
+      }
+      if (!file.type.startsWith("image/")) {
+        toast({ title: "Error", description: "Please upload an image file", variant: "destructive" })
+        return
+      }
       setIdCardBack(file)
       const reader = new FileReader()
       reader.onload = (event) => {
@@ -146,7 +182,10 @@ export default function RegisterPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
-    if (!validateForm()) return
+    if (!validateForm()) {
+      setIsLoading(false)
+      return
+    }
     setIsLoading(true)
     try {
       const formData = new FormData()
@@ -162,14 +201,27 @@ export default function RegisterPage() {
           title: "Registration successful",
           description: "Please log in to access your account.",
         })
-        router.push("/login")
+        // Reset form state
+        setName("")
+        setEmail("")
+        setPassword("")
+        setConfirmPassword("")
+        setIdCardNumber("")
+        setIdCardFront(null)
+        setIdCardBack(null)
+        setIdCardFrontPreview(null)
+        setIdCardBackPreview(null)
+        setFormErrors({})
+        setPasswordErrors([])
+        setPasswordStrength(0)
+        setIsRegistered(true) // Trigger redirect via useEffect
       } else {
         setError(result.error || "Registration failed")
+        setIsLoading(false)
       }
     } catch (err) {
-      setError("An unexpected error occurred")
       console.error("Registration error:", err)
-    } finally {
+      setError("An unexpected error occurred")
       setIsLoading(false)
     }
   }
@@ -221,6 +273,7 @@ export default function RegisterPage() {
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     className={cn("pl-10", formErrors.name && "border-red-500 focus-visible:ring-red-500")}
+                    disabled={isLoading}
                   />
                 </div>
                 {formErrors.name && (
@@ -240,6 +293,7 @@ export default function RegisterPage() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className={cn("pl-10", formErrors.email && "border-red-500 focus-visible:ring-red-500")}
+                    disabled={isLoading}
                   />
                 </div>
                 {formErrors.email && (
@@ -259,11 +313,13 @@ export default function RegisterPage() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className={cn("pl-10", formErrors.password && "border-red-500 focus-visible:ring-red-500")}
+                    disabled={isLoading}
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
                     className="absolute right-3 top-3 text-gray-400 hover:text-gray-600"
+                    disabled={isLoading}
                   >
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
@@ -305,11 +361,13 @@ export default function RegisterPage() {
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     className={cn("pl-10", formErrors.confirmPassword && "border-red-500 focus-visible:ring-red-500")}
+                    disabled={isLoading}
                   />
                   <button
                     type="button"
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                     className="absolute right-3 top-3 text-gray-400 hover:text-gray-600"
+                    disabled={isLoading}
                   >
                     {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
@@ -329,6 +387,7 @@ export default function RegisterPage() {
                     value={idCardNumber}
                     onChange={handleIdCardNumberChange}
                     className={cn(formErrors.idCardNumber && "border-red-500 focus-visible:ring-red-500")}
+                    disabled={isLoading}
                   />
                   {formattedIdCardNumber && (
                     <div className="absolute right-3 top-3 text-sm text-gray-500">Format: {formattedIdCardNumber}</div>
@@ -357,6 +416,7 @@ export default function RegisterPage() {
                       accept="image/*"
                       className="hidden"
                       onChange={handleIdCardFrontUpload}
+                      disabled={isLoading}
                     />
                     {idCardFrontPreview ? (
                       <div className="relative">
@@ -373,6 +433,7 @@ export default function RegisterPage() {
                             setIdCardFront(null)
                             setIdCardFrontPreview(null)
                           }}
+                          disabled={isLoading}
                         >
                           <X className="h-3 w-3" />
                         </button>
@@ -406,6 +467,7 @@ export default function RegisterPage() {
                       accept="image/*"
                       className="hidden"
                       onChange={handleIdCardBackUpload}
+                      disabled={isLoading}
                     />
                     {idCardBackPreview ? (
                       <div className="relative">
@@ -422,6 +484,7 @@ export default function RegisterPage() {
                             setIdCardBack(null)
                             setIdCardBackPreview(null)
                           }}
+                          disabled={isLoading}
                         >
                           <X className="h-3 w-3" />
                         </button>
@@ -441,7 +504,7 @@ export default function RegisterPage() {
                 </div>
               </div>
               <div className="flex items-center space-x-2">
-                <Checkbox id="terms" required />
+                <Checkbox id="terms" required disabled={isLoading} />
                 <Label htmlFor="terms" className="text-sm font-normal">
                   I agree to the{" "}
                   <Link href="/terms" className="text-primary hover:underline">

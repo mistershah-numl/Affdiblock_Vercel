@@ -28,12 +28,12 @@ export async function requestIssuerRole(userId: string, issuerData: any) {
 }
 
 // Verify JWT token
-export function verifyToken(token: string): { success: boolean; decoded?: TokenPayload } {
+export function verifyToken(token: string) {
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as TokenPayload
+    const decoded = jwt.verify(token, JWT_SECRET) as { id: string; email: string; role: string }
     return { success: true, decoded }
   } catch (error) {
     console.error("Token verification error:", error)
-    return { success: false }
+    return { success: false, decoded: null }
   }
 }

@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
@@ -16,14 +15,27 @@ export function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) 
   const router = useRouter()
 
   useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
+    console.log("ProtectedRoute check:", {
+      isLoading,
+      isAuthenticated,
+      userRole: user?.role,
+      requiredRole,
+      page: window.location.pathname,
+    })
+
+    if (isLoading) return
+
+    if (!isAuthenticated) {
+      console.log("Redirecting to /login from", window.location.pathname)
       router.push("/login")
+      return
     }
 
-    if (!isLoading && isAuthenticated && requiredRole && user?.role !== requiredRole) {
+    if (requiredRole && user?.role !== requiredRole) {
+      console.log(`Redirecting to /dashboard from ${window.location.pathname}, required role: ${requiredRole}`)
       router.push("/dashboard")
     }
-  }, [isLoading, isAuthenticated, router, requiredRole, user])
+  }, [isLoading, isAuthenticated, user, requiredRole, router])
 
   if (isLoading) {
     return <div>Loading...</div>

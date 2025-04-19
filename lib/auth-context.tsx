@@ -1,28 +1,29 @@
 "use client"
 
-import { createContext, useContext, useState, useEffect, ReactNode } from "react"
+import { createContext, useContext, useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Cookies from "js-cookie"
-import { jwtDecode } from "jwt-decode"
+import { toast } from "@/components/ui/use-toast"
 
 interface User {
-  id: string
+  _id: string
   name: string
   email: string
   role: string
+  status: string
   phone?: string
-  idCardNumber?: string
-  idCardFrontUrl?: string
-  idCardBackUrl?: string
+  idCardNumber: string
+  idCardFrontUrl: string
+  idCardBackUrl: string
   address?: string
   bio?: string
   walletAddress?: string
-  status?: string
-  createdAt?: string
-  updatedAt?: string
+  avatar?: string
+  createdAt: string
+  updatedAt: string
 }
 
-interface AuthContextProps {
+interface AuthContextType {
   user: User | null
   token: string | null
   isAuthenticated: boolean
@@ -30,101 +31,133 @@ interface AuthContextProps {
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>
   register: (formData: FormData) => Promise<{ success: boolean; error?: string }>
   logout: () => void
+  updateUser: (user: User) => void
   verifyTokenClientSide: () => boolean
-  updateUser: (updatedUser: Partial<User>) => void
 }
 
-const AuthContext = createContext<AuthContextProps | undefined>(undefined)
+const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const router = useRouter()
+export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [token, setToken] = useState<string | null>(null)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
+  const router = useRouter()
 
   useEffect(() => {
-    const storedUser = localStorage.getItem("user")
-    const storedToken = localStorage.getItem("token") || Cookies.get("token")
+    const initializeAuth = async () => {
+      try {
+        const storedUser = localStorage.getItem("user")
+        const storedToken = Cookies.get("token")
 
-    if (storedUser && storedToken) {
-      const parsedUser = JSON.parse(storedUser)
-      setUser(parsedUser)
-      setToken(storedToken)
-      setIsAuthenticated(verifyTokenClientSide())
+        console.log("Initializing auth:", { storedUser: !!storedUser, storedToken: !!storedToken })
+
+        if (!storedToken || !storedUser) {
+          console.log("No token or user found, setting unauthenticated")
+          setIsAuthenticated(false)
+          setUser(null)
+          setToken(null)
+          setIsLoading(false)
+          return
+        }
+
+        let parsedUser: User
+        try {
+          parsedUser = JSON.parse(storedUser)
+        } catch (error) {
+          console.error("Error parsing stored user:", error)
+          setIsAuthenticated(false)
+          setUser(null)
+          setToken(null)
+          localStorage.removeItem("user")
+          Cookies.remove("token", { path: "/" })
+          setIsLoading(false)
+          return
+        }
+
+        // Optimistically set auth state to reduce flicker
+        setUser(parsedUser)
+        setToken(storedToken)
+        setIsAuthenticated(true)
+
+        const response = await fetch("/api/auth/verify", {
+          headers: { Authorization: `Bearer ${storedToken}` },
+        })
+
+        if (response.ok) {
+          console.log("Token verified successfully")
+        } else {
+          const errorData = await response.json()
+          console.log("Server-side token verification failed:", errorData)
+          toast({
+            title: "Session Expired",
+            description: "Please log in again.",
+            variant: "destructive",
+          })
+          setUser(null)
+          setToken(null)
+          setIsAuthenticated(false)
+          localStorage.removeItem("user")
+          Cookies.remove("token", { path: "/" })
+          router.push("/login")
+        }
+      } catch (error) {
+        console.error("Error initializing auth:", error)
+        toast({
+          title: "Authentication Error",
+          description: "Failed to verify session. Please log in again.",
+          variant: "destructive",
+        })
+        setUser(null)
+        setToken(null)
+        setIsAuthenticated(false)
+        localStorage.removeItem("user")
+        Cookies.remove("token", { path: "/" })
+        router.push("/login")
+      } finally {
+        setIsLoading(false)
+      }
     }
 
-    setIsLoading(false)
-  }, [])
+    initializeAuth()
+  }, [router])
 
   const login = async (email: string, password: string) => {
     try {
-      setIsLoading(true)
-      console.log("Sending login request with:", { email })
-
       const response = await fetch("/api/auth/login", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       })
-
-      console.log("Login API response status:", response.status)
       const data = await response.json()
-      console.log("Login API response:", data)
-
-      if (!data.success) {
-        console.log("Login failed:", data.error)
+      if (data.success) {
+        setUser(data.user)
+        setToken(data.token)
+        setIsAuthenticated(true)
+        localStorage.setItem("user", JSON.stringify(data.user))
+        Cookies.set("token", data.token, { expires: 7, path: "/", secure: true, sameSite: "strict" })
+        router.push("/dashboard")
+        return { success: true }
+      } else {
         return { success: false, error: data.error || "Login failed" }
       }
-
-      setUser(data.user)
-      setToken(data.token)
-      setIsAuthenticated(true)
-
-      localStorage.setItem("user", JSON.stringify(data.user))
-      localStorage.setItem("token", data.token)
-
-      Cookies.set("token", data.token, { expires: 7, path: "/", secure: true, sameSite: "strict" })
-      console.log("Token set in cookies:", data.token)
-
-      await new Promise((resolve) => setTimeout(resolve, 100))
-
-      return { success: true }
-    } catch (error) {
-      console.error("Login error in AuthContext:", error)
-      return { success: false, error: "An unexpected error occurred" }
-    } finally {
-      setIsLoading(false)
+    } catch (error: any) {
+      console.error("Login error:", error)
+      return { success: false, error: error.message || "An unexpected error occurred" }
     }
   }
 
   const register = async (formData: FormData) => {
     try {
-      setIsLoading(true)
-      console.log("Sending registration request")
-
       const response = await fetch("/api/auth/register", {
         method: "POST",
         body: formData,
       })
-
-      console.log("Register API response status:", response.status)
       const data = await response.json()
-      console.log("Register API response:", data)
-
-      if (!data.success) {
-        console.log("Registration failed:", data.error)
-        return { success: false, error: data.error || "Registration failed" }
-      }
-
-      return { success: true }
+      return data
     } catch (error) {
-      console.error("Registration error in AuthContext:", error)
+      console.error("Registration error:", error)
       return { success: false, error: "An unexpected error occurred" }
-    } finally {
-      setIsLoading(false)
     }
   }
 
@@ -132,43 +165,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null)
     setToken(null)
     setIsAuthenticated(false)
-
     localStorage.removeItem("user")
-    localStorage.removeItem("token")
     Cookies.remove("token", { path: "/" })
-
     router.push("/login")
   }
 
-  const verifyTokenClientSide = () => {
-    if (!token) return false
-
-    try {
-      const decoded: { exp: number } = jwtDecode(token)
-      const currentTime = Math.floor(Date.now() / 1000)
-      if (decoded.exp < currentTime) {
-        console.log("Token expired")
-        return false
-      }
-      console.log("Token is valid (client-side)")
-      return true
-    } catch (error) {
-      console.error("Client-side token verification failed:", error)
-      return false
-    }
+  const updateUser = (updatedUser: User) => {
+    setUser(updatedUser)
+    localStorage.setItem("user", JSON.stringify(updatedUser))
   }
 
-  const updateUser = (updatedUser: Partial<User>) => {
-    if (user) {
-      const newUser = { ...user, ...updatedUser }
-      setUser(newUser)
-      localStorage.setItem("user", JSON.stringify(newUser))
-    }
+  const verifyTokenClientSide = () => {
+    return !!token
   }
 
   return (
     <AuthContext.Provider
-      value={{ user, token, isAuthenticated, isLoading, login, register, logout, verifyTokenClientSide, updateUser }}
+      value={{ user, token, isAuthenticated, isLoading, login, register, logout, updateUser, verifyTokenClientSide }}
     >
       {children}
     </AuthContext.Provider>

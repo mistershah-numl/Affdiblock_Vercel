@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -12,17 +12,18 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Separator } from "@/components/ui/separator"
 import { Badge } from "@/components/ui/badge"
-import { Loader2, Save, Upload, Shield, Key, Wallet } from "lucide-react"
+import { Loader2, Save, Upload, Shield, Key, AlertCircle, Check, X } from "lucide-react"
 import DashboardLayout from "@/components/dashboard-layout"
 import { useAuth } from "@/lib/auth-context"
 import { ProtectedRoute } from "@/components/protected-route"
 import { toast } from "@/components/ui/use-toast"
 import Image from "next/image"
+import { Progress } from "@/components/ui/progress"
 
 export default function ProfilePage() {
   const router = useRouter()
-  const { user, token, updateUser } = useAuth()
-  const [isLoading, setIsLoading] = useState(false)
+  const { user, token, updateUser, isLoading, isAuthenticated, logout } = useAuth()
+  const [isProfileLoading, setIsProfileLoading] = useState(false)
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -32,8 +33,23 @@ export default function ProfilePage() {
     bio: "",
     walletAddress: "",
   })
+  const [avatarFile, setAvatarFile] = useState<File | null>(null)
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
+  const avatarInputRef = useRef<HTMLInputElement>(null)
+
+  const [currentPassword, setCurrentPassword] = useState("")
+  const [newPassword, setNewPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
+  const [isChangingPassword, setIsChangingPassword] = useState(false)
+  const [passwordStrength, setPasswordStrength] = useState(0)
+  const [passwordErrors, setPasswordErrors] = useState<string[]>([])
 
   useEffect(() => {
+    console.log("ProfilePage auth state:", { isLoading, isAuthenticated, user: user?.email })
+    if (!isLoading && !isAuthenticated) {
+      console.log("ProfilePage redirecting to /login")
+      router.push("/login")
+    }
     if (user) {
       setFormData({
         name: user.name || "",
@@ -44,11 +60,39 @@ export default function ProfilePage() {
         bio: user.bio || "",
         walletAddress: user.walletAddress || "",
       })
+      setAvatarPreview(user.avatar || null)
     }
-  }, [user])
+  }, [user, isLoading, isAuthenticated, router])
+
+  useEffect(() => {
+    const errors: string[] = []
+    let strength = 0
+    if (newPassword) {
+      if (newPassword.length >= 8) strength += 25
+      else errors.push("Password must be at least 8 characters long")
+      if (/[A-Z]/.test(newPassword)) strength += 25
+      else errors.push("Password must contain at least one uppercase letter")
+      if (/\d/.test(newPassword)) strength += 25
+      else errors.push("Password must contain at least one number")
+      if (/[^A-Za-z0-9]/.test(newPassword)) strength += 25
+      else errors.push("Password must contain at least one special character")
+      if (formData.name && formData.name.length > 2) {
+        const nameParts = formData.name.toLowerCase().split(" ")
+        for (const part of nameParts) {
+          if (part.length > 2 && newPassword.toLowerCase().includes(part)) {
+            errors.push("Password cannot contain parts of your name")
+            strength = Math.max(0, strength - 25)
+            break
+          }
+        }
+      }
+    }
+    setPasswordStrength(strength)
+    setPasswordErrors(errors)
+  }, [newPassword, formData.name])
 
   const handleSaveProfile = async () => {
-    setIsLoading(true)
+    setIsProfileLoading(true)
     try {
       const response = await fetch("/api/user/profile", {
         method: "PUT",
@@ -86,7 +130,7 @@ export default function ProfilePage() {
         variant: "destructive",
       })
     } finally {
-      setIsLoading(false)
+      setIsProfileLoading(false)
     }
   }
 
@@ -95,20 +139,108 @@ export default function ProfilePage() {
     setFormData((prev) => ({ ...prev, [name]: value }))
   }
 
-  const [currentPassword, setCurrentPassword] = useState("")
-  const [newPassword, setNewPassword] = useState("")
-  const [confirmPassword, setConfirmPassword] = useState("")
-  const [isChangingPassword, setIsChangingPassword] = useState(false)
+  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0]
+      if (file.size > 5 * 1024 * 1024) {
+        toast({
+          title: "Error",
+          description: "Avatar must be less than 5MB",
+          variant: "destructive",
+        })
+        return
+      }
+      if (!file.type.startsWith("image/")) {
+        toast({
+          title: "Error",
+          description: "Avatar must be an image file",
+          variant: "destructive",
+        })
+        return
+      }
+      setAvatarFile(file)
+      const reader = new FileReader()
+      reader.onload = (event) => {
+        setAvatarPreview(event.target?.result as string)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
 
-  const handleChangePassword = async () => {
-    if (newPassword !== confirmPassword) {
+  const handleAvatarUpload = async () => {
+    if (!avatarFile) {
       toast({
         title: "Error",
-        description: "New passwords do not match",
+        description: "Please select an image to upload",
         variant: "destructive",
       })
       return
     }
+
+    setIsProfileLoading(true)
+    try {
+      const formData = new FormData()
+      formData.append("avatar", avatarFile)
+      const response = await fetch("/api/user/avatar", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
+      })
+      const data = await response.json()
+      if (data.success) {
+        updateUser(data.user)
+        toast({
+          title: "Avatar updated",
+          description: "Your profile picture has been updated successfully.",
+        })
+        setAvatarFile(null)
+        setAvatarPreview(data.user.avatar)
+      } else {
+        toast({
+          title: "Error",
+          description: data.error || "Failed to update avatar",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error("Error uploading avatar:", error)
+      toast({
+        title: "Error",
+        description: "An unexpected error occurred",
+        variant: "destructive",
+      })
+    } finally {
+      setIsProfileLoading(false)
+    }
+  }
+
+  const validatePasswordForm = () => {
+    const errors: {
+      currentPassword?: string
+      newPassword?: string
+      confirmPassword?: string
+    } = {}
+    if (!currentPassword) errors.currentPassword = "Current password is required"
+    if (!newPassword) errors.newPassword = "New password is required"
+    else if (passwordErrors.length > 0) errors.newPassword = "Password does not meet requirements"
+    if (!confirmPassword) errors.confirmPassword = "Please confirm your new password"
+    else if (newPassword !== confirmPassword) errors.confirmPassword = "Passwords do not match"
+    return errors
+  }
+
+  const handleChangePassword = async () => {
+    const errors = validatePasswordForm()
+    if (Object.keys(errors).length > 0) {
+      toast({
+        title: "Error",
+        description: Object.values(errors)[0],
+        variant: "destructive",
+      })
+      return
+    }
+
     setIsChangingPassword(true)
     try {
       const response = await fetch("/api/user/change-password", {
@@ -125,12 +257,11 @@ export default function ProfilePage() {
       const data = await response.json()
       if (data.success) {
         toast({
-          title: "Password updated",
-          description: "Your password has been updated successfully.",
+          title: "Password Changed",
+          description: "Your password has been updated successfully. Redirecting to login...",
+          className: "bg-green-100 dark:bg-green-900 border-green-500",
         })
-        setCurrentPassword("")
-        setNewPassword("")
-        setConfirmPassword("")
+        logout() // Call logout immediately after toast
       } else {
         toast({
           title: "Error",
@@ -147,7 +278,34 @@ export default function ProfilePage() {
       })
     } finally {
       setIsChangingPassword(false)
+      setCurrentPassword("")
+      setNewPassword("")
+      setConfirmPassword("")
     }
+  }
+
+  const getPasswordStrengthText = () => {
+    if (passwordStrength === 0) return "Very Weak"
+    if (passwordStrength <= 25) return "Weak"
+    if (passwordStrength <= 50) return "Medium"
+    if (passwordStrength <= 75) return "Strong"
+    return "Very Strong"
+  }
+
+  const getPasswordStrengthColor = () => {
+    if (passwordStrength === 0) return "bg-gray-200 dark:bg-gray-700"
+    if (passwordStrength <= 25) return "bg-red-500"
+    if (passwordStrength <= 50) return "bg-orange-500"
+    if (passwordStrength <= 75) return "bg-yellow-500"
+    return "bg-green-500"
+  }
+
+  if (isLoading) {
+    return <div>Loading...</div>
+  }
+
+  if (!isAuthenticated) {
+    return null
   }
 
   if (!user) {
@@ -178,13 +336,46 @@ export default function ProfilePage() {
                   <div className="flex flex-col md:flex-row gap-6">
                     <div className="flex flex-col items-center space-y-4">
                       <Avatar className="h-32 w-32">
-                        <AvatarImage src={user.avatar || "/placeholder.svg?height=128&width=128"} alt={user.name || ""} />
+                        <AvatarImage
+                          src={avatarPreview || user.avatar || "/placeholder.svg?height=128&width=128"}
+                          alt={user.name || "User"}
+                        />
                         <AvatarFallback className="text-2xl">{user.name?.charAt(0) || "U"}</AvatarFallback>
                       </Avatar>
-                      <Button variant="outline" size="sm" className="flex items-center gap-2">
-                        <Upload className="h-4 w-4" />
-                        <span>Change Photo</span>
-                      </Button>
+                      <div className="space-y-2">
+                        <input
+                          ref={avatarInputRef}
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={handleAvatarChange}
+                        />
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="flex items-center gap-2"
+                          onClick={() => avatarInputRef.current?.click()}
+                        >
+                          <Upload className="h-4 w-4" />
+                          <span>{user.avatar ? "Change Photo" : "Upload Photo"}</span>
+                        </Button>
+                        {avatarFile && (
+                          <Button
+                            variant="default"
+                            size="sm"
+                            className="flex items-center gap-2 w-full"
+                            onClick={handleAvatarUpload}
+                            disabled={isProfileLoading}
+                          >
+                            {isProfileLoading ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Save className="h-4 w-4" />
+                            )}
+                            <span>Save Photo</span>
+                          </Button>
+                        )}
+                      </div>
                     </div>
                     <div className="flex-1 space-y-4">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -316,8 +507,8 @@ export default function ProfilePage() {
                   </div>
                 </CardContent>
                 <CardFooter className="flex justify-end">
-                  <Button onClick={handleSaveProfile} disabled={isLoading}>
-                    {isLoading ? (
+                  <Button onClick={handleSaveProfile} disabled={isProfileLoading}>
+                    {isProfileLoading ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                         Saving...
@@ -414,6 +605,26 @@ export default function ProfilePage() {
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
                     />
+                    {newPassword && (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <Progress value={passwordStrength} className={getPasswordStrengthColor()} />
+                          <span className="text-xs ml-2">{getPasswordStrengthText()}</span>
+                        </div>
+                        <div className="space-y-1">
+                          {passwordErrors.map((error, index) => (
+                            <p key={index} className="text-xs flex items-center gap-1 text-amber-500 dark:text-amber-400">
+                              <X className="h-3 w-3" /> {error}
+                            </p>
+                          ))}
+                          {passwordStrength === 100 && (
+                            <p className="text-xs flex items-center gap-1 text-green-500">
+                              <Check className="h-3 w-3" /> Password meets all requirements
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="confirmPassword">Confirm New Password</Label>

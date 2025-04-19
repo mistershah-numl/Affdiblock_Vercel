@@ -1,72 +1,68 @@
-"use client";
+"use client"
 
-import { useState, useEffect } from "react";
-import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
-import { Eye, EyeOff, Lock, Mail, AlertCircle } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
-import { ThemeToggle } from "@/components/theme-toggle";
-import { useAuth } from "@/lib/auth-context";
-import { toast } from "@/components/ui/use-toast";
+import { useState, useEffect } from "react"
+import Link from "next/link"
+import { useRouter, useSearchParams } from "next/navigation"
+import { Eye, EyeOff, Lock, Mail, AlertCircle } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Checkbox } from "@/components/ui/checkbox"
+import { ThemeToggle } from "@/components/theme-toggle"
+import { useAuth } from "@/lib/auth-context"
+import { toast } from "@/components/ui/use-toast"
 
 export default function LoginPage() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const { login } = useAuth();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const { login } = useAuth()
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  const [showPassword, setShowPassword] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  // Check for 'from' query parameter to show a message if redirected back
   useEffect(() => {
-    const from = searchParams.get("from");
+    const from = searchParams.get("from")
     if (from) {
-      setError("Please log in to access that page.");
+      setError("Please log in to access that page.")
     }
-  }, [searchParams]);
+  }, [searchParams])
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    console.log("handleSubmit called with:", { email });
-
-    setError(null);
-    setIsLoading(true);
+    e.preventDefault()
+    console.log("handleSubmit called with:", { email })
+    setError(null)
+    setIsLoading(true)
 
     try {
-      const result = await login(email, password);
-      console.log("Login result:", result);
-
-      if (result.success) {
-        toast({
-          title: "Login successful",
-          description: "Welcome back to AffidBlock!",
-        });
-        console.log("Redirecting to /dashboard");
-        router.push("/dashboard");
-      } else {
-        console.log("Login failed:", result.error);
-        setError(result.error || "Login failed");
-      }
-    } catch (err) {
-      console.error("Unexpected error in handleSubmit:", err);
-      setError("An unexpected error occurred");
+      await login(email, password)
+      toast({
+        title: "Login successful",
+        description: "Welcome back to AffidBlock!",
+      })
+      console.log("Redirecting to /dashboard")
+      // Note: login() already handles redirect to /dashboard
+    } catch (err: any) {
+      console.error("Login error:", err)
+      const errorMessage = err.message || "An unexpected error occurred"
+      setError(errorMessage)
+      toast({
+        title: "Login Failed",
+        description: errorMessage,
+        variant: "destructive",
+      })
     } finally {
-      setIsLoading(false);
+      setIsLoading(false)
     }
-  };
+  }
 
   return (
     <div className="container flex items-center justify-center min-h-[calc(100vh-4rem)] py-12 relative">
       <div className="absolute top-4 right-4">
         <ThemeToggle />
       </div>
-
       <div className="w-full max-w-md">
         <Card className="border-none shadow-xl dark:bg-gray-800/60 dark:backdrop-blur-sm">
           <CardHeader className="space-y-1">
@@ -82,7 +78,6 @@ export default function LoginPage() {
                 <p className="text-red-600 dark:text-red-400 text-sm">{error}</p>
               </div>
             )}
-
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
@@ -136,7 +131,6 @@ export default function LoginPage() {
                 {isLoading ? "Signing in..." : "Sign in"}
               </Button>
             </form>
-
             <div className="mt-4 text-center text-sm">
               <span className="text-gray-500 dark:text-gray-400">Don't have an account?</span>{" "}
               <Link href="/register" className="text-primary font-medium hover:underline">
@@ -167,5 +161,5 @@ export default function LoginPage() {
         </Card>
       </div>
     </div>
-  );
+  )
 }

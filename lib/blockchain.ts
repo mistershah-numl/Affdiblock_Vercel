@@ -1,175 +1,124 @@
-// This is a simplified mock implementation of blockchain interactions
-// In a real application, this would connect to an actual blockchain network
-
 import { ethers } from "ethers"
 
-// Mock ABI for the smart contract
-const contractABI = [
-  "function issueAffidavit(string memory id, string memory dataHash) public returns (bool)",
-  "function verifyAffidavit(string memory id) public view returns (bool isValid, string memory dataHash, uint256 timestamp, address issuer)",
-  "function revokeAffidavit(string memory id) public returns (bool)",
-  "function getAffidavitDetails(string memory id) public view returns (string memory dataHash, uint256 timestamp, address issuer, bool isActive)",
+// Environment variables
+const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || "https://mainnet.infura.io/v3/YOUR_INFURA_PROJECT_ID"
+const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || "0xYourContractAddress"
+const CONTRACT_ABI = [
+  // Simplified ABI for affidavit contract
+  {
+    "constant": false,
+    "inputs": [
+      { "name": "recipient", "type": "address" },
+      { "name": "affidavitHash", "type": "string" },
+      { "name": "metadata", "type": "string" }
+    ],
+    "name": "issueAffidavit",
+    "outputs": [],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [
+      { "name": "affidavitHash", "type": "string" }
+    ],
+    "name": "verifyAffidavit",
+    "outputs": [
+      { "name": "isValid", "type": "bool" },
+      { "name": "issuer", "type": "address" },
+      { "name": "timestamp", "type": "uint256" }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  }
 ]
 
-// Mock contract address
-const contractAddress = "0x1234567890123456789012345678901234567890"
+// Initialize provider
+const provider = new ethers.JsonRpcProvider(RPC_URL)
 
-// Mock provider and signer
-let provider: ethers.providers.JsonRpcProvider
-let contract: ethers.Contract
-let signer: ethers.Signer
+// Initialize contract
+const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider)
 
-// Initialize the blockchain connection
-export const initBlockchain = async () => {
+/**
+ * Get a signer for the given private key
+ * @param privateKey The private key of the wallet
+ * @returns Signer instance
+ */
+export function getSigner(privateKey: string) {
+  return new ethers.Wallet(privateKey, provider)
+}
+
+/**
+ * Issue an affidavit on the blockchain
+ * @param recipient The recipient's wallet address
+ * @param affidavitHash The hash of the affidavit content
+ * @param metadata Additional metadata (e.g., JSON string)
+ * @param privateKey The issuer's private key
+ * @returns Transaction receipt
+ */
+export async function issueAffidavit(
+  recipient: string,
+  affidavitHash: string,
+  metadata: string,
+  privateKey: string
+) {
   try {
-    // In a real app, this would connect to a real blockchain network
-    provider = new ethers.providers.JsonRpcProvider("https://mock-rpc-url.example")
+    if (!ethers.isAddress(recipient)) {
+      throw new Error("Invalid recipient address")
+    }
+    const signer = getSigner(privateKey)
+    const contractWithSigner = contract.connect(signer)
 
-    // In a real app, this would use a wallet or private key
-    signer = provider.getSigner()
+    const tx = await contractWithSigner.issueAffidavit(recipient, affidavitHash, metadata, {
+      gasLimit: 200000,
+    })
 
-    // Connect to the smart contract
-    contract = new ethers.Contract(contractAddress, contractABI, signer)
-
-    console.log("Blockchain connection initialized")
-    return true
+    const receipt = await tx.wait()
+    console.log("Affidavit issued:", receipt)
+    return receipt
   } catch (error) {
-    console.error("Failed to initialize blockchain connection:", error)
-    return false
+    console.error("Error issuing affidavit:", error)
+    throw error
   }
 }
 
-// Issue a new affidavit on the blockchain
-export const issueAffidavit = async (id: string, data: any) => {
+/**
+ * Verify an affidavit on the blockchain
+ * @param affidavitHash The hash of the affidavit to verify
+ * @returns Verification result { isValid, issuer, timestamp }
+ */
+export async function verifyAffidavit(affidavitHash: string) {
   try {
-    // Hash the affidavit data
-    const dataHash = ethers.utils.id(JSON.stringify(data))
-
-    // In a real app, this would call the actual smart contract
-    // const tx = await contract.issueAffidavit(id, dataHash)
-    // await tx.wait()
-
-    // Mock successful transaction
-    console.log(`Affidavit ${id} issued with hash ${dataHash}`)
-
+    const result = await contract.verifyAffidavit(affidavitHash)
     return {
-      success: true,
-      transactionHash: `0x${Math.random().toString(16).substr(2, 64)}`,
-      blockNumber: Math.floor(Math.random() * 10000000),
-      timestamp: new Date().toISOString(),
+      isValid: result[0],
+      issuer: result[1],
+      timestamp: Number(result[2])
     }
   } catch (error) {
-    console.error("Failed to issue affidavit:", error)
-    return {
-      success: false,
-      error: "Failed to issue affidavit on the blockchain",
-    }
+    console.error("Error verifying affidavit:", error)
+    throw error
   }
 }
 
-// Verify an affidavit on the blockchain
-export const verifyAffidavit = async (id: string) => {
-  try {
-    // In a real app, this would call the actual smart contract
-    // const result = await contract.verifyAffidavit(id)
-
-    // Mock verification result
-    const isValid = Math.random() > 0.1 // 90% chance of being valid
-
-    if (isValid) {
-      return {
-        success: true,
-        isValid: true,
-        dataHash: `0x${Math.random().toString(16).substr(2, 64)}`,
-        timestamp: new Date().toISOString(),
-        issuer: `0x${Math.random().toString(16).substr(2, 40)}`,
-      }
-    } else {
-      return {
-        success: true,
-        isValid: false,
-        error: "Affidavit not found or has been revoked",
-      }
-    }
-  } catch (error) {
-    console.error("Failed to verify affidavit:", error)
-    return {
-      success: false,
-      error: "Failed to verify affidavit on the blockchain",
-    }
-  }
+/**
+ * Parse units for ether values
+ * @param value The value to parse
+ * @param decimals Number of decimals
+ * @returns BigNumberish
+ */
+export function parseUnits(value: string, decimals: number = 18) {
+  return ethers.parseUnits(value, decimals)
 }
 
-// Revoke an affidavit on the blockchain
-export const revokeAffidavit = async (id: string) => {
-  try {
-    // In a real app, this would call the actual smart contract
-    // const tx = await contract.revokeAffidavit(id)
-    // await tx.wait()
-
-    // Mock successful revocation
-    console.log(`Affidavit ${id} revoked`)
-
-    return {
-      success: true,
-      transactionHash: `0x${Math.random().toString(16).substr(2, 64)}`,
-      blockNumber: Math.floor(Math.random() * 10000000),
-      timestamp: new Date().toISOString(),
-    }
-  } catch (error) {
-    console.error("Failed to revoke affidavit:", error)
-    return {
-      success: false,
-      error: "Failed to revoke affidavit on the blockchain",
-    }
-  }
-}
-
-// Get affidavit details from the blockchain
-export const getAffidavitDetails = async (id: string) => {
-  try {
-    // In a real app, this would call the actual smart contract
-    // const result = await contract.getAffidavitDetails(id)
-
-    // Mock affidavit details
-    return {
-      success: true,
-      dataHash: `0x${Math.random().toString(16).substr(2, 64)}`,
-      timestamp: new Date().toISOString(),
-      issuer: `0x${Math.random().toString(16).substr(2, 40)}`,
-      isActive: Math.random() > 0.2, // 80% chance of being active
-    }
-  } catch (error) {
-    console.error("Failed to get affidavit details:", error)
-
-    return {
-      success: false,
-      error: "Failed to get affidavit details from the blockchain",
-    }
-  }
-}
-
-// Mark a witness as fake
-export const markWitnessAsFake = async (witnessId: string) => {
-  try {
-    // In a real app, this would call the actual smart contract
-    // const tx = await contract.markWitnessAsFake(witnessId)
-    // await tx.wait()
-
-    // Mock successful operation
-    console.log(`Witness ${witnessId} marked as fake`)
-
-    return {
-      success: true,
-      transactionHash: `0x${Math.random().toString(16).substr(2, 64)}`,
-      blockNumber: Math.floor(Math.random() * 10000000),
-      timestamp: new Date().toISOString(),
-    }
-  } catch (error) {
-    console.error("Failed to mark witness as fake:", error)
-    return {
-      success: false,
-      error: "Failed to mark witness as fake on the blockchain",
-    }
-  }
+/**
+ * Format units for ether values
+ * @param value The value to format
+ * @param decimals Number of decimals
+ * @returns String
+ */
+export function formatUnits(value: ethers.BigNumberish, decimals: number = 18) {
+  return ethers.formatUnits(value, decimals)
 }

@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import DashboardLayout from "@/components/dashboard-layout"
 import { useAuth } from "@/lib/auth-context"
+import { toast } from "@/components/ui/use-toast"
 
 const CreateAffidavitDialog = dynamic(() => import("@/components/create-affidavit-dialog"), {
   ssr: false,
@@ -20,18 +21,24 @@ const CreateAffidavitDialog = dynamic(() => import("@/components/create-affidavi
 })
 
 export default function DashboardPage() {
-  const { user, token, isAuthenticated, isLoading, verifyTokenClientSide, logout } = useAuth()
+  const { user, isAuthenticated, isLoading, logout } = useAuth()
   const router = useRouter()
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
 
   useEffect(() => {
-    if (!isLoading && (!isAuthenticated || !token || !verifyTokenClientSide())) {
-      console.log("Client-side auth failed, redirecting to login")
+    console.log("DashboardPage auth state:", { isLoading, isAuthenticated, user: user?.email })
+    if (!isLoading && !isAuthenticated) {
+      console.log("DashboardPage redirecting to /login")
+      toast({
+        title: "Session Expired",
+        description: "Please log in to continue.",
+        variant: "destructive",
+      })
       router.push("/login")
     }
-  }, [isLoading, isAuthenticated, token, verifyTokenClientSide, router])
+  }, [isLoading, isAuthenticated, router])
 
   const stats = [
     {
@@ -137,7 +144,7 @@ export default function DashboardPage() {
   }
 
   if (isLoading) {
-    return <div>Loading...</div>
+    return <div className="flex justify-center items-center h-screen">Loading...</div>
   }
 
   if (!isAuthenticated || !user) {
@@ -162,7 +169,6 @@ export default function DashboardPage() {
             </Button>
           </div>
         </div>
-
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           {stats.map((stat, index) => (
             <Card key={index}>
@@ -187,7 +193,6 @@ export default function DashboardPage() {
             </Card>
           ))}
         </div>
-
         <Tabs defaultValue="all" className="w-full">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
             <TabsList>
@@ -206,7 +211,6 @@ export default function DashboardPage() {
               />
             </div>
           </div>
-
           <Card>
             <CardHeader className="pb-2">
               <CardTitle>Recent Affidavits</CardTitle>
@@ -258,7 +262,6 @@ export default function DashboardPage() {
           </Card>
         </Tabs>
       </div>
-
       <CreateAffidavitDialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen} />
     </DashboardLayout>
   )

@@ -49,6 +49,7 @@ export async function POST(request: Request) {
         address: user.address,
         bio: user.bio,
         walletAddress: user.walletAddress,
+        avatar: user.avatar,
         createdAt: user.createdAt,
         updatedAt: user.updatedAt,
       },

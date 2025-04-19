@@ -44,6 +44,7 @@ export async function GET(request: Request) {
         walletAddress: user.walletAddress,
         role: user.role,
         status: user.status,
+        avatar: user.avatar,
         createdAt: user.createdAt,
         updatedAt: user.updatedAt,
       },
@@ -72,7 +73,7 @@ export async function PUT(request: Request) {
     }
 
     const body = await request.json()
-    const { name, phone, address, bio, walletAddress } = body
+    const { name, phone, address, bio, walletAddress, avatar } = body
 
     await dbConnect()
 
@@ -91,6 +92,7 @@ export async function PUT(request: Request) {
     if (address) user.address = address
     if (bio) user.bio = bio
     if (walletAddress) user.walletAddress = walletAddress
+    if (avatar) user.avatar = avatar
 
     await user.save()
 
@@ -109,6 +111,7 @@ export async function PUT(request: Request) {
         walletAddress: user.walletAddress,
         role: user.role,
         status: user.status,
+        avatar: user.avatar,
         createdAt: user.createdAt,
         updatedAt: user.updatedAt,
       },
