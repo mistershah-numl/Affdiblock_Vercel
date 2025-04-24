@@ -1,86 +1,335 @@
 "use client"
 
-import type React from "react"
+import type React from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Loader2, Mail, Globe, Wallet, Save } from "lucide-react";
+import DashboardLayout from "@/components/dashboard-layout";
+import { useAuth } from "@/lib/auth-context";
+import { toast } from "@/components/ui/use-toast";
+import { getWalletBalance, getNetworkName, getConnectedMetaMaskWallet } from "@/lib/blockchain";
+import { ethers } from "ethers";
 
-import { useState } from "react"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Switch } from "@/components/ui/switch"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Bell, Lock, Mail, Shield, Smartphone, Globe, Wallet, Save, Loader2, FileText } from "lucide-react"
-import DashboardLayout from "@/components/dashboard-layout"
+interface AccountSettings {
+  email: string;
+  language: string;
+  timezone: string;
+  sessionTimeout: string;
+}
+
+interface BlockchainSettings {
+  walletAddress: string;
+  network: string;
+  balance: string;
+  walletConnectedAt: string;
+}
 
 export default function SettingsPage() {
-  const [isLoading, setIsLoading] = useState(false)
+  const router = useRouter();
+  const { user, token, updateUser, isLoading: authLoading, isAuthenticated } = useAuth();
+  const [isSaving, setIsSaving] = useState(false);
+  const [isConnectingWallet, setIsConnectingWallet] = useState(false);
+  const [isWalletMatched, setIsWalletMatched] = useState(false);
 
-  // Account settings
-  const [accountSettings, setAccountSettings] = useState({
-    email: "john.doe@example.com",
+  const [accountSettings, setAccountSettings] = useState<AccountSettings>({
+    email: "",
     language: "english",
-    timezone: "UTC+5",
-  })
-
-  // Notification settings
-  const [notificationSettings, setNotificationSettings] = useState({
-    emailNotifications: true,
-    pushNotifications: false,
-    affidavitUpdates: true,
-    marketingEmails: false,
-    securityAlerts: true,
-  })
-
-  // Security settings
-  const [securitySettings, setSecuritySettings] = useState({
-    twoFactorAuth: false,
-    loginAlerts: true,
+    timezone: "UTC+0",
     sessionTimeout: "30",
-  })
+  });
 
-  // Blockchain settings
-  const [blockchainSettings, setBlockchainSettings] = useState({
-    walletAddress: "0x1234567890abcdef1234567890abcdef12345678",
-    network: "ethereum",
-    autoVerify: true,
-  })
+  const [blockchainSettings, setBlockchainSettings] = useState<BlockchainSettings>({
+    walletAddress: "",
+    network: "",
+    balance: "0",
+    walletConnectedAt: "",
+  });
+
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) {
+      router.push("/login");
+    }
+    if (user) {
+      setAccountSettings({
+        email: user.email,
+        language: user.language || "english",
+        timezone: user.timezone || "UTC+0",
+        sessionTimeout: user.sessionTimeout?.toString() || "30",
+      });
+      setBlockchainSettings({
+        walletAddress: user.walletAddress || "",
+        network: user.network || "",
+        balance: "0",
+        walletConnectedAt: user.walletConnectedAt ? new Date(user.walletConnectedAt).toLocaleString() : "",
+      });
+      checkWalletMatch();
+    }
+
+    // Listen for MetaMask account changes
+    if (window.ethereum) {
+      window.ethereum.on("accountsChanged", handleAccountsChanged);
+    }
+
+    // Cleanup event listener
+    return () => {
+      if (window.ethereum) {
+        window.ethereum.removeListener("accountsChanged", handleAccountsChanged);
+      }
+    };
+  }, [user, authLoading, isAuthenticated, router]);
+
+  const checkWalletMatch = async () => {
+    try {
+      const metaMaskWallet = await getConnectedMetaMaskWallet();
+      const isMatched = user?.walletAddress && metaMaskWallet && 
+        metaMaskWallet.toLowerCase() === user.walletAddress.toLowerCase();
+      setIsWalletMatched(!!isMatched);
+      if (isMatched && user?.walletAddress) {
+        const balance = await getWalletBalance(user.walletAddress);
+        setBlockchainSettings((prev) => ({ ...prev, balance }));
+      } else {
+        setBlockchainSettings((prev) => ({ ...prev, balance: "0" }));
+      }
+    } catch (error) {
+      console.error("Error checking wallet match:", error);
+      setIsWalletMatched(false);
+    }
+  };
+
+  const handleAccountsChanged = async (accounts: string[]) => {
+    if (!user?.walletAddress) return;
+
+    const metaMaskWallet = accounts.length > 0 ? accounts[0] : null;
+    if (!metaMaskWallet && user.walletAddress) {
+      // Wallet disconnected in MetaMask
+      await handleDisconnectWallet();
+    } else {
+      // Check if the new account matches
+      await checkWalletMatch();
+    }
+  };
+
+  const fetchWalletBalance = async (walletAddress: string) => {
+    try {
+      const balance = await getWalletBalance(walletAddress);
+      setBlockchainSettings((prev) => ({ ...prev, balance }));
+    } catch (error) {
+      console.error("Error fetching balance:", error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch wallet balance",
+        variant: "destructive",
+      });
+    }
+  };
 
   const handleAccountSettingChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target
-    setAccountSettings((prev) => ({ ...prev, [name]: value }))
+    const { name, value } = e.target;
+    setAccountSettings((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleConnectWallet = async () => {
+    if (!window.ethereum) {
+      console.log("Triggering MetaMask not installed toast");
+      toast({
+        title: "Error",
+        description: "MetaMask is not installed. Please install the MetaMask extension.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsConnectingWallet(true);
+    try {
+      const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
+      if (!accounts || accounts.length === 0) {
+        throw new Error("No accounts returned from MetaMask");
+      }
+      const walletAddress = accounts[0];
+      const network = await getNetworkName();
+      const balance = await getWalletBalance(walletAddress);
+
+      const response = await fetch("/api/user/wallet", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ walletAddress, network }),
+      });
+      const data = await response.json();
+
+      if (data.success) {
+        const updatedUser = {
+          ...user,
+          walletAddress,
+          walletConnectedAt: new Date().toISOString(),
+          network,
+        };
+        updateUser(updatedUser);
+        setBlockchainSettings({
+          walletAddress,
+          network,
+          balance,
+          walletConnectedAt: new Date().toLocaleString(),
+        });
+        setIsWalletMatched(true);
+        console.log("Triggering wallet connected toast");
+        toast({
+          title: "Wallet Connected",
+          description: "Your MetaMask wallet has been connected successfully.",
+          className: "bg-green-100 dark:bg-green-900 border-green-500",
+        });
+      } else {
+        console.log("Triggering wallet connection error toast");
+        toast({
+          title: "Error",
+          description: data.error || "Failed to connect wallet",
+          variant: "destructive",
+        });
+      }
+    } catch (error: any) {
+      if (error.code === 4001 || error.message?.toLowerCase().includes("reject")) {
+        console.log("Triggering connection rejected toast");
+        toast({
+          title: "Connection Rejected",
+          description: "Wallet connection request was rejected.",
+          variant: "destructive",
+        });
+      } else {
+        console.error("Error connecting wallet:", error);
+        console.log("Triggering generic error toast");
+        toast({
+          title: "Error",
+          description: error.message || "Failed to connect MetaMask wallet",
+          variant: "destructive",
+        });
+      }
+    } finally {
+      setIsConnectingWallet(false);
+    }
+  };
+
+  const handleDisconnectWallet = async () => {
+    setIsConnectingWallet(true);
+    try {
+      const response = await fetch("/api/user/wallet", {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const data = await response.json();
+
+      if (data.success) {
+        const updatedUser = {
+          ...user,
+          walletAddress: null,
+          walletConnectedAt: null,
+          network: null,
+        };
+        updateUser(updatedUser);
+        setBlockchainSettings({
+          walletAddress: "",
+          network: "",
+          balance: "0",
+          walletConnectedAt: "",
+        });
+        setIsWalletMatched(false);
+        console.log("Triggering wallet disconnected toast");
+        toast({
+          title: "Wallet Disconnected",
+          description: "Your wallet has been disconnected successfully.",
+          className: "bg-green-100 dark:bg-green-900 border-green-500",
+        });
+      } else {
+        console.log("Triggering wallet disconnection error toast");
+        toast({
+          title: "Error",
+          description: data.error || "Failed to disconnect wallet",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Error disconnecting wallet:", error);
+      console.log("Triggering generic disconnection error toast");
+      toast({
+        title: "Error",
+        description: "An unexpected error occurred",
+        variant: "destructive",
+      });
+    } finally {
+      setIsConnectingWallet(false);
+    }
+  };
+
+  const handleSaveSettings = async () => {
+    setIsSaving(true);
+    try {
+      const response = await fetch("/api/user/settings", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          language: accountSettings.language,
+          timezone: accountSettings.timezone,
+          sessionTimeout: accountSettings.sessionTimeout,
+        }),
+      });
+      const data = await response.json();
+
+      if (data.success) {
+        updateUser(data.user);
+        console.log("Triggering settings saved toast");
+        toast({
+          title: "Settings Saved",
+          description: "Your account settings have been updated successfully.",
+          className: "bg-green-100 dark:bg-green-900 border-green-500",
+        });
+      } else {
+        console.log("Triggering settings save error toast");
+        toast({
+          title: "Error",
+          description: data.error || "Failed to save settings",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Error saving settings:", error);
+      console.log("Triggering generic settings error toast");
+      toast({
+        title: "Error",
+        description: "An unexpected error occurred",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Debug toast rendering
+  useEffect(() => {
+    console.log("Testing toast rendering");
+    toast({
+      title: "Debug",
+      description: "Toast rendering test",
+      variant: "default",
+    });
+  }, []);
+
+  if (authLoading) {
+    return <div>Loading...</div>;
   }
 
-  const handleNotificationToggle = (name: string) => {
-    setNotificationSettings((prev) => ({ ...prev, [name]: !prev[name as keyof typeof prev] }))
-  }
-
-  const handleSecuritySettingChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target
-    setSecuritySettings((prev) => ({ ...prev, [name]: value }))
-  }
-
-  const handleSecurityToggle = (name: string) => {
-    setSecuritySettings((prev) => ({ ...prev, [name]: !prev[name as keyof typeof prev] }))
-  }
-
-  const handleBlockchainSettingChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target
-    setBlockchainSettings((prev) => ({ ...prev, [name]: value }))
-  }
-
-  const handleBlockchainToggle = (name: string) => {
-    setBlockchainSettings((prev) => ({ ...prev, [name]: !prev[name as keyof typeof prev] }))
-  }
-
-  const handleSaveSettings = (section: string) => {
-    setIsLoading(true)
-
-    // Simulate API call
-    setTimeout(() => {
-      setIsLoading(false)
-      // Show success message or notification
-      alert(`${section} settings saved successfully!`)
-    }, 1000)
+  if (!isAuthenticated) {
+    return null;
   }
 
   return (
@@ -88,18 +337,15 @@ export default function SettingsPage() {
       <div className="space-y-6">
         <div>
           <h2 className="text-2xl font-bold">Settings</h2>
-          <p className="text-gray-500 dark:text-gray-400">Manage your account settings and preferences</p>
+          <p className="text-gray-500 dark:text-gray-400">Manage your account settings and wallet</p>
         </div>
 
         <Tabs defaultValue="account" className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="account">Account</TabsTrigger>
-            <TabsTrigger value="notifications">Notifications</TabsTrigger>
-            <TabsTrigger value="security">Security</TabsTrigger>
             <TabsTrigger value="blockchain">Blockchain</TabsTrigger>
           </TabsList>
 
-          {/* Account Settings */}
           <TabsContent value="account" className="mt-6">
             <Card>
               <CardHeader>
@@ -167,7 +413,7 @@ export default function SettingsPage() {
                       <option value="UTC-3">UTC-03:00</option>
                       <option value="UTC-2">UTC-02:00</option>
                       <option value="UTC-1">UTC-01:00</option>
-                      <option value="UTC">UTC+00:00</option>
+                      <option value="UTC+0">UTC+00:00</option>
                       <option value="UTC+1">UTC+01:00</option>
                       <option value="UTC+2">UTC+02:00</option>
                       <option value="UTC+3">UTC+03:00</option>
@@ -184,123 +430,31 @@ export default function SettingsPage() {
                     </select>
                   </div>
                 </div>
-              </CardContent>
-              <CardFooter className="flex justify-end">
-                <Button onClick={() => handleSaveSettings("Account")} disabled={isLoading}>
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Saving...
-                    </>
-                  ) : (
-                    <>
-                      <Save className="mr-2 h-4 w-4" />
-                      Save Changes
-                    </>
-                  )}
-                </Button>
-              </CardFooter>
-            </Card>
-          </TabsContent>
 
-          {/* Notification Settings */}
-          <TabsContent value="notifications" className="mt-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Notification Settings</CardTitle>
-                <CardDescription>Manage how you receive notifications</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Mail className="h-4 w-4 text-gray-500" />
-                      <div>
-                        <Label htmlFor="emailNotifications" className="text-base">
-                          Email Notifications
-                        </Label>
-                        <p className="text-sm text-gray-500">Receive notifications via email</p>
-                      </div>
-                    </div>
-                    <Switch
-                      id="emailNotifications"
-                      checked={notificationSettings.emailNotifications}
-                      onCheckedChange={() => handleNotificationToggle("emailNotifications")}
-                    />
+                <div className="space-y-2">
+                  <Label htmlFor="sessionTimeout">Session Timeout (minutes)</Label>
+                  <div className="flex items-center gap-2">
+                    <Globe className="h-4 w-4 text-gray-500" />
+                    <select
+                      id="sessionTimeout"
+                      name="sessionTimeout"
+                      value={accountSettings.sessionTimeout}
+                      onChange={handleAccountSettingChange}
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <option value="15">15 minutes</option>
+                      <option value="30">30 minutes</option>
+                      <option value="60">1 hour</option>
+                      <option value="120">2 hours</option>
+                      <option value="240">4 hours</option>
+                    </select>
                   </div>
-
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Smartphone className="h-4 w-4 text-gray-500" />
-                      <div>
-                        <Label htmlFor="pushNotifications" className="text-base">
-                          Push Notifications
-                        </Label>
-                        <p className="text-sm text-gray-500">Receive notifications on your device</p>
-                      </div>
-                    </div>
-                    <Switch
-                      id="pushNotifications"
-                      checked={notificationSettings.pushNotifications}
-                      onCheckedChange={() => handleNotificationToggle("pushNotifications")}
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <FileText className="h-4 w-4 text-gray-500" />
-                      <div>
-                        <Label htmlFor="affidavitUpdates" className="text-base">
-                          Affidavit Updates
-                        </Label>
-                        <p className="text-sm text-gray-500">Get notified about changes to your affidavits</p>
-                      </div>
-                    </div>
-                    <Switch
-                      id="affidavitUpdates"
-                      checked={notificationSettings.affidavitUpdates}
-                      onCheckedChange={() => handleNotificationToggle("affidavitUpdates")}
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Mail className="h-4 w-4 text-gray-500" />
-                      <div>
-                        <Label htmlFor="marketingEmails" className="text-base">
-                          Marketing Emails
-                        </Label>
-                        <p className="text-sm text-gray-500">Receive promotional emails and updates</p>
-                      </div>
-                    </div>
-                    <Switch
-                      id="marketingEmails"
-                      checked={notificationSettings.marketingEmails}
-                      onCheckedChange={() => handleNotificationToggle("marketingEmails")}
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Shield className="h-4 w-4 text-gray-500" />
-                      <div>
-                        <Label htmlFor="securityAlerts" className="text-base">
-                          Security Alerts
-                        </Label>
-                        <p className="text-sm text-gray-500">Get notified about security-related events</p>
-                      </div>
-                    </div>
-                    <Switch
-                      id="securityAlerts"
-                      checked={notificationSettings.securityAlerts}
-                      onCheckedChange={() => handleNotificationToggle("securityAlerts")}
-                    />
-                  </div>
+                  <p className="text-xs text-gray-500">Automatically log out after a period of inactivity</p>
                 </div>
               </CardContent>
               <CardFooter className="flex justify-end">
-                <Button onClick={() => handleSaveSettings("Notification")} disabled={isLoading}>
-                  {isLoading ? (
+                <Button onClick={handleSaveSettings} disabled={isSaving}>
+                  {isSaving ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       Saving...
@@ -316,102 +470,11 @@ export default function SettingsPage() {
             </Card>
           </TabsContent>
 
-          {/* Security Settings */}
-          <TabsContent value="security" className="mt-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Security Settings</CardTitle>
-                <CardDescription>Manage your account security and authentication</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Shield className="h-4 w-4 text-gray-500" />
-                      <div>
-                        <Label htmlFor="twoFactorAuth" className="text-base">
-                          Two-Factor Authentication
-                        </Label>
-                        <p className="text-sm text-gray-500">Add an extra layer of security to your account</p>
-                      </div>
-                    </div>
-                    <Switch
-                      id="twoFactorAuth"
-                      checked={securitySettings.twoFactorAuth}
-                      onCheckedChange={() => handleSecurityToggle("twoFactorAuth")}
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Bell className="h-4 w-4 text-gray-500" />
-                      <div>
-                        <Label htmlFor="loginAlerts" className="text-base">
-                          Login Alerts
-                        </Label>
-                        <p className="text-sm text-gray-500">Get notified when someone logs into your account</p>
-                      </div>
-                    </div>
-                    <Switch
-                      id="loginAlerts"
-                      checked={securitySettings.loginAlerts}
-                      onCheckedChange={() => handleSecurityToggle("loginAlerts")}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="sessionTimeout">Session Timeout (minutes)</Label>
-                    <div className="flex items-center gap-2">
-                      <Lock className="h-4 w-4 text-gray-500" />
-                      <select
-                        id="sessionTimeout"
-                        name="sessionTimeout"
-                        value={securitySettings.sessionTimeout}
-                        onChange={handleSecuritySettingChange}
-                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        <option value="15">15 minutes</option>
-                        <option value="30">30 minutes</option>
-                        <option value="60">1 hour</option>
-                        <option value="120">2 hours</option>
-                        <option value="240">4 hours</option>
-                      </select>
-                    </div>
-                    <p className="text-xs text-gray-500">Automatically log out after a period of inactivity</p>
-                  </div>
-
-                  <div className="pt-4">
-                    <Button variant="outline" className="w-full">
-                      <Lock className="mr-2 h-4 w-4" />
-                      Change Password
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-              <CardFooter className="flex justify-end">
-                <Button onClick={() => handleSaveSettings("Security")} disabled={isLoading}>
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Saving...
-                    </>
-                  ) : (
-                    <>
-                      <Save className="mr-2 h-4 w-4" />
-                      Save Changes
-                    </>
-                  )}
-                </Button>
-              </CardFooter>
-            </Card>
-          </TabsContent>
-
-          {/* Blockchain Settings */}
           <TabsContent value="blockchain" className="mt-6">
             <Card>
               <CardHeader>
                 <CardTitle>Blockchain Settings</CardTitle>
-                <CardDescription>Manage your blockchain and verification settings</CardDescription>
+                <CardDescription>Manage your blockchain wallet</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="space-y-2">
@@ -421,77 +484,76 @@ export default function SettingsPage() {
                     <Input
                       id="walletAddress"
                       name="walletAddress"
-                      value={blockchainSettings.walletAddress}
-                      onChange={handleBlockchainSettingChange}
+                      value={isWalletMatched ? blockchainSettings.walletAddress : ""}
+                      disabled
                     />
                   </div>
-                  <p className="text-xs text-gray-500">Your blockchain wallet address for signing transactions</p>
+                  <p className="text-xs text-gray-500">
+                    {isWalletMatched && blockchainSettings.walletAddress
+                      ? `Connected on ${blockchainSettings.walletConnectedAt}`
+                      : "No wallet connected"}
+                  </p>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="network">Blockchain Network</Label>
+                  <Label htmlFor="network">Network</Label>
                   <div className="flex items-center gap-2">
                     <Globe className="h-4 w-4 text-gray-500" />
-                    <select
-                      id="network"
-                      name="network"
-                      value={blockchainSettings.network}
-                      onChange={handleBlockchainSettingChange}
-                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      <option value="ethereum">Ethereum Mainnet</option>
-                      <option value="polygon">Polygon</option>
-                      <option value="binance">Binance Smart Chain</option>
-                      <option value="avalanche">Avalanche</option>
-                      <option value="optimism">Optimism</option>
-                    </select>
+                    <Input id="network" name="network" value={isWalletMatched ? blockchainSettings.network : ""} disabled />
                   </div>
-                  <p className="text-xs text-gray-500">Select the blockchain network for your affidavits</p>
+                  <p className="text-xs text-gray-500">The blockchain network your wallet is connected to</p>
                 </div>
 
-                <div className="flex items-center justify-between">
+                <div className="space-y-2">
+                  <Label htmlFor="balance">Balance</Label>
                   <div className="flex items-center gap-2">
-                    <Shield className="h-4 w-4 text-gray-500" />
-                    <div>
-                      <Label htmlFor="autoVerify" className="text-base">
-                        Auto-Verify
-                      </Label>
-                      <p className="text-sm text-gray-500">Automatically verify affidavits on the blockchain</p>
-                    </div>
+                    <Wallet className="h-4 w-4 text-gray-500" />
+                    <Input
+                      id="balance"
+                      name="balance"
+                      value={isWalletMatched ? `${blockchainSettings.balance} ETH` : "0 ETH"}
+                      disabled
+                    />
                   </div>
-                  <Switch
-                    id="autoVerify"
-                    checked={blockchainSettings.autoVerify}
-                    onCheckedChange={() => handleBlockchainToggle("autoVerify")}
-                  />
+                  <p className="text-xs text-gray-500">Your wallet's current balance</p>
                 </div>
 
                 <div className="pt-4">
-                  <Button variant="outline" className="w-full">
-                    <Wallet className="mr-2 h-4 w-4" />
-                    Connect New Wallet
-                  </Button>
+                  {isWalletMatched ? (
+                    <Button
+                      variant="destructive"
+                      className="w-full"
+                      onClick={handleDisconnectWallet}
+                      disabled={isConnectingWallet}
+                    >
+                      {isConnectingWallet ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Wallet className="mr-2 h-4 w-4" />
+                      )}
+                      Disconnect Wallet
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      className="w-full"
+                      onClick={handleConnectWallet}
+                      disabled={isConnectingWallet}
+                    >
+                      {isConnectingWallet ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Wallet className="mr-2 h-4 w-4" />
+                      )}
+                      Connect Wallet
+                    </Button>
+                  )}
                 </div>
               </CardContent>
-              <CardFooter className="flex justify-end">
-                <Button onClick={() => handleSaveSettings("Blockchain")} disabled={isLoading}>
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Saving...
-                    </>
-                  ) : (
-                    <>
-                      <Save className="mr-2 h-4 w-4" />
-                      Save Changes
-                    </>
-                  )}
-                </Button>
-              </CardFooter>
             </Card>
           </TabsContent>
         </Tabs>
       </div>
     </DashboardLayout>
-  )
+  );
 }

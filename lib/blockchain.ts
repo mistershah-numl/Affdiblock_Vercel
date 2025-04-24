@@ -1,124 +1,92 @@
-import { ethers } from "ethers"
+import { ethers } from "ethers";
 
-// Environment variables
-const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || "https://mainnet.infura.io/v3/YOUR_INFURA_PROJECT_ID"
-const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || "0xYourContractAddress"
-const CONTRACT_ABI = [
-  // Simplified ABI for affidavit contract
-  {
-    "constant": false,
-    "inputs": [
-      { "name": "recipient", "type": "address" },
-      { "name": "affidavitHash", "type": "string" },
-      { "name": "metadata", "type": "string" }
-    ],
-    "name": "issueAffidavit",
-    "outputs": [],
-    "payable": false,
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "constant": true,
-    "inputs": [
-      { "name": "affidavitHash", "type": "string" }
-    ],
-    "name": "verifyAffidavit",
-    "outputs": [
-      { "name": "isValid", "type": "bool" },
-      { "name": "issuer", "type": "address" },
-      { "name": "timestamp", "type": "uint256" }
-    ],
-    "payable": false,
-    "stateMutability": "view",
-    "type": "function"
+// Hypothetical affidavit contract ABI (replace with your actual ABI)
+const AFFIDAVIT_CONTRACT_ABI = [
+  "function issueAffidavit(string memory documentHash) public returns (uint256)",
+  "function verifyAffidavit(uint256 affidavitId) public view returns (bool)",
+];
+
+// Hypothetical contract address (replace with your deployed contract address)
+const AFFIDAVIT_CONTRACT_ADDRESS = "0xYourContractAddressHere";
+
+export async function getConnectedMetaMaskWallet(): Promise<string | null> {
+  if (!window.ethereum) {
+    throw new Error("MetaMask is not installed");
   }
-]
 
-// Initialize provider
-const provider = new ethers.JsonRpcProvider(RPC_URL)
-
-// Initialize contract
-const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider)
-
-/**
- * Get a signer for the given private key
- * @param privateKey The private key of the wallet
- * @returns Signer instance
- */
-export function getSigner(privateKey: string) {
-  return new ethers.Wallet(privateKey, provider)
-}
-
-/**
- * Issue an affidavit on the blockchain
- * @param recipient The recipient's wallet address
- * @param affidavitHash The hash of the affidavit content
- * @param metadata Additional metadata (e.g., JSON string)
- * @param privateKey The issuer's private key
- * @returns Transaction receipt
- */
-export async function issueAffidavit(
-  recipient: string,
-  affidavitHash: string,
-  metadata: string,
-  privateKey: string
-) {
   try {
-    if (!ethers.isAddress(recipient)) {
-      throw new Error("Invalid recipient address")
-    }
-    const signer = getSigner(privateKey)
-    const contractWithSigner = contract.connect(signer)
-
-    const tx = await contractWithSigner.issueAffidavit(recipient, affidavitHash, metadata, {
-      gasLimit: 200000,
-    })
-
-    const receipt = await tx.wait()
-    console.log("Affidavit issued:", receipt)
-    return receipt
+    const provider = new ethers.BrowserProvider(window.ethereum);
+    const accounts = await provider.listAccounts();
+    return accounts.length > 0 ? accounts[0].address : null;
   } catch (error) {
-    console.error("Error issuing affidavit:", error)
-    throw error
+    console.error("Error getting connected wallet:", error);
+    return null;
   }
 }
 
-/**
- * Verify an affidavit on the blockchain
- * @param affidavitHash The hash of the affidavit to verify
- * @returns Verification result { isValid, issuer, timestamp }
- */
-export async function verifyAffidavit(affidavitHash: string) {
+export async function getWalletBalance(walletAddress: string): Promise<string> {
+  if (!window.ethereum) {
+    throw new Error("MetaMask is not installed");
+  }
+
   try {
-    const result = await contract.verifyAffidavit(affidavitHash)
-    return {
-      isValid: result[0],
-      issuer: result[1],
-      timestamp: Number(result[2])
-    }
+    const provider = new ethers.BrowserProvider(window.ethereum);
+    const balance = await provider.getBalance(walletAddress);
+    return ethers.formatEther(balance);
   } catch (error) {
-    console.error("Error verifying affidavit:", error)
-    throw error
+    console.error("Error fetching balance:", error);
+    throw new Error("Unable to fetch wallet balance");
   }
 }
 
-/**
- * Parse units for ether values
- * @param value The value to parse
- * @param decimals Number of decimals
- * @returns BigNumberish
- */
-export function parseUnits(value: string, decimals: number = 18) {
-  return ethers.parseUnits(value, decimals)
+export async function getNetworkName(): Promise<string> {
+  if (!window.ethereum) {
+    throw new Error("MetaMask is not installed");
+  }
+
+  try {
+    const provider = new ethers.BrowserProvider(window.ethereum);
+    const network = await provider.getNetwork();
+    return network.name === "unknown" ? "Ganache" : network.name;
+  } catch (error) {
+    console.error("Error fetching network:", error);
+    throw new Error("Unable to fetch network name");
+  }
 }
 
-/**
- * Format units for ether values
- * @param value The value to format
- * @param decimals Number of decimals
- * @returns String
- */
-export function formatUnits(value: ethers.BigNumberish, decimals: number = 18) {
-  return ethers.formatUnits(value, decimals)
+export async function issueAffidavit(documentHash: string): Promise<number> {
+  if (!window.ethereum) {
+    throw new Error("MetaMask is not installed");
+  }
+
+  try {
+    const provider = new ethers.BrowserProvider(window.ethereum);
+    const signer = await provider.getSigner();
+    const contract = new ethers.Contract(AFFIDAVIT_CONTRACT_ADDRESS, AFFIDAVIT_CONTRACT_ABI, signer);
+    
+    const tx = await contract.issueAffidavit(documentHash);
+    const receipt = await tx.wait();
+    const affidavitId = receipt.logs[0].args[0].toNumber(); // Adjust based on your contract's event
+    return affidavitId;
+  } catch (error) {
+    console.error("Error issuing affidavit:", error);
+    throw new Error("Failed to issue affidavit");
+  }
+}
+
+export async function verifyAffidavit(affidavitId: number): Promise<boolean> {
+  if (!window.ethereum) {
+    throw new Error("MetaMask is not installed");
+  }
+
+  try {
+    const provider = new ethers.BrowserProvider(window.ethereum);
+    const contract = new ethers.Contract(AFFIDAVIT_CONTRACT_ADDRESS, AFFIDAVIT_CONTRACT_ABI, provider);
+    
+    const isValid = await contract.verifyAffidavit(affidavitId);
+    return isValid;
+  } catch (error) {
+    console.error("Error verifying affidavit:", error);
+    throw new Error("Failed to verify affidavit");
+  }
 }
