@@ -25,10 +25,14 @@ async function dbConnect() {
   if (!cached.promise) {
     const opts = {
       bufferCommands: false,
-      maxPoolSize: 10, // Allow up to 10 concurrent connections
-      serverSelectionTimeoutMS: 5000, // Timeout after 5s if server is unavailable
-      socketTimeoutMS: 45000, // Close sockets after 45s of inactivity
+      maxPoolSize: 10,
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 45000,
     }
+
+    console.log("Clearing Mongoose model cache before connecting")
+    mongoose.models = {};
+    mongoose.modelSchemas = {};
 
     console.log("Establishing new MongoDB connection")
     cached.promise = mongoose
@@ -39,7 +43,7 @@ async function dbConnect() {
       })
       .catch((error) => {
         console.error("MongoDB connection error:", error)
-        cached.promise = null // Reset promise on failure to allow retries
+        cached.promise = null
         throw error
       })
   }

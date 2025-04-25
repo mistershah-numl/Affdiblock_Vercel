@@ -132,7 +132,7 @@ export function Sidebar() {
           <Link href="/" className="flex items-center gap-2">
             <span className="text-xl font-bold">
               <span className="text-primary">Affid</span>
-              <span className="text-secondary">Block</span>
+              <span className="text-secondary">Blocking</span>
             </span>
           </Link>
         )}

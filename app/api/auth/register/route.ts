@@ -40,16 +40,25 @@ export async function POST(request: NextRequest) {
       idCardNumber,
       idCardFrontUrl: frontResult.url,
       idCardBackUrl: backResult.url,
+      language: "english",
+      timezone: "UTC+0",
+      sessionTimeout: 30,
+      status: "Active",
+      roles: ["User"],
+      activeRole: "User",
     })
 
+    console.log("User object before saving:", user.toObject());
+
     await user.save()
+
+    console.log("User saved to database:", await User.findOne({ email }));
 
     return NextResponse.json({
       success: true,
       message: "Registration successful. Please log in.",
     })
   } catch (error) {
-    console.error("Registration error:", error)
     return NextResponse.json({ success: false, error: "Internal server error" }, { status: 500 })
   }
 }

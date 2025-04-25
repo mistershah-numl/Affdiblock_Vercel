@@ -1,6 +1,8 @@
 import mongoose, { Schema, Document } from "mongoose";
 import bcrypt from "bcryptjs";
 
+console.log("Loading User model schema...");
+
 interface IUser extends Document {
   name: string;
   email: string;
@@ -19,17 +21,18 @@ interface IUser extends Document {
   idCardFrontUrl?: string;
   idCardBackUrl?: string;
   status: string;
-  role: string;
+  roles: string[];
+  activeRole: string;
   createdAt: Date;
   updatedAt: Date;
   comparePassword: (candidatePassword: string) => Promise<boolean>;
 }
 
-const UserSchema: Schema = new Schema(
+const userSchema: Schema = new Schema(
   {
     name: { type: String, required: true },
     email: { type: String, required: true, unique: true },
-    password: { type: String, required: true, select: false },
+    password: { type: String, required: true },
     phone: { type: String },
     idCardNumber: { type: String },
     address: { type: String },
@@ -44,22 +47,43 @@ const UserSchema: Schema = new Schema(
     idCardFrontUrl: { type: String },
     idCardBackUrl: { type: String },
     status: { type: String, default: "Active" },
-    role: { type: String, default: "User" },
-    createdAt: { type: Date, default: Date.now },
-    updatedAt: { type: Date, default: Date.now },
+    roles: { type: [String], default: ["User"] },
+    activeRole: { type: String, default: "User" },
+    role: { type: String, select: false, default: undefined }, // Explicitly exclude old `role` field
   },
   { timestamps: true }
 );
 
-UserSchema.pre("save", async function (next) {
-  if (!this.isModified("password")) return next();
+// Hash password before saving
+userSchema.pre("save", async function (next) {
+  const user = this as IUser;
+  if (!user.isModified("password")) return next();
   const salt = await bcrypt.genSalt(8);
-  this.password = await bcrypt.hash(this.password, salt);
+  user.password = await bcrypt.hash(user.password, salt);
   next();
 });
 
-UserSchema.methods.comparePassword = async function (candidatePassword: string): Promise<boolean> {
-  return bcrypt.compare(candidatePassword, this.password);
+// Ensure roles and activeRole are set correctly, and remove role field
+userSchema.pre("save", function (next) {
+  const user = this as IUser;
+  console.log("Pre-save hook: Ensuring roles and activeRole for user:", user.email);
+  if (!user.roles || user.roles.length === 0) {
+    user.roles = ["User"];
+  }
+  if (!user.activeRole) {
+    user.activeRole = "User";
+  }
+  if (user.role) {
+    console.log("Pre-save hook: Removing old 'role' field for user:", user.email);
+    user.role = undefined;
+  }
+  next();
+});
+
+// Method to compare passwords
+userSchema.methods.comparePassword = async function (candidatePassword: string): Promise<boolean> {
+  const user = this as IUser;
+  return bcrypt.compare(candidatePassword, user.password);
 };
 
-export default mongoose.models.User || mongoose.model<IUser>("User", UserSchema);
+export default mongoose.models.User || mongoose.model<IUser>("User", userSchema);

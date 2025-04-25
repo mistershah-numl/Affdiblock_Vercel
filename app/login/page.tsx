@@ -36,26 +36,24 @@ export default function LoginPage() {
     setError(null)
     setIsLoading(true)
 
-    try {
-      await login(email, password)
+    const result = await login(email, password)
+    if (result.success) {
       toast({
         title: "Login successful",
         description: "Welcome back to AffidBlock!",
       })
       console.log("Redirecting to /dashboard")
-      // Note: login() already handles redirect to /dashboard
-    } catch (err: any) {
-      console.error("Login error:", err)
-      const errorMessage = err.message || "An unexpected error occurred"
+      // Redirect is handled by login() in auth-context
+    } else {
+      const errorMessage = result.error || "An unexpected error occurred"
       setError(errorMessage)
       toast({
         title: "Login Failed",
         description: errorMessage,
         variant: "destructive",
       })
-    } finally {
-      setIsLoading(false)
     }
+    setIsLoading(false)
   }
 
   return (

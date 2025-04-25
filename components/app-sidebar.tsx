@@ -3,7 +3,19 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Home, LayoutDashboard, FileText, Settings, Users, Shield, LogOut, FileCheck } from "lucide-react"
+import {
+  Home,
+  LayoutDashboard,
+  FileText,
+  Settings,
+  Users,
+  Shield,
+  LogOut,
+  FileCheck,
+  Flag,
+  UserCheck,
+  AlertCircle,
+} from "lucide-react"
 
 import {
   Sidebar,
@@ -21,24 +33,21 @@ import {
 import { useAuth } from "@/lib/auth-context"
 
 export function AppSidebar() {
-  const pathname = usePathname()
-  const { open } = useSidebar()
-  const { isAuthenticated, user, logout } = useAuth()
-  const [mounted, setMounted] = useState(false)
+  const pathname = usePathname();
+  const { open } = useSidebar();
+  const { isAuthenticated, user, logout } = useAuth();
+  const [mounted, setMounted] = useState(false);
 
-  // Set mounted state when component mounts
   useEffect(() => {
-    setMounted(true)
-  }, [])
+    setMounted(true);
+  }, []);
 
-  const isActive = (path: string) => pathname === path
+  const isActive = (path: string) => pathname === path;
 
-  // Only render sidebar for logged-in users and dashboard paths
   if (!mounted || !isAuthenticated || !pathname?.startsWith("/dashboard")) {
-    return null
+    return null;
   }
 
-  // Define sidebar items based on user role
   const getUserMenuItems = () => {
     const commonItems = [
       {
@@ -52,11 +61,6 @@ export function AppSidebar() {
         href: "/dashboard",
       },
       {
-        icon: <FileText />,
-        label: "My Affidavits",
-        href: "/dashboard/affidavits",
-      },
-      {
         icon: <Users />,
         label: "Profile",
         href: "/dashboard/profile",
@@ -66,42 +70,83 @@ export function AppSidebar() {
         label: "Settings",
         href: "/dashboard/settings",
       },
-    ]
+      {
+        icon: <AlertCircle />,
+        label: "Support",
+        href: "/dashboard/support",
+      },
+    ];
 
-    // Admin-specific items
-    if (user?.role === "Admin") {
-      return [
-        ...commonItems,
-        {
-          icon: <Users />,
-          label: "Users Management",
-          href: "/dashboard/users",
-        },
-        {
-          icon: <Shield />,
-          label: "Issuer Requests",
-          href: "/dashboard/issuer-requests",
-        },
-      ]
+    const userItems = [
+      {
+        icon: <FileText />,
+        label: "My Affidavits",
+        href: "/dashboard/affidavits",
+      },
+    ];
+
+    const issuerItems = [
+      {
+        icon: <FileText />,
+        label: "Affidavit Requests",
+        href: "/dashboard/affidavit-requests",
+      },
+      {
+        icon: <FileCheck />,
+        label: "Issued Affidavits",
+        href: "/dashboard/issued-affidavits",
+      },
+      {
+        icon: <Flag />,
+        label: "Flagged Witnesses",
+        href: "/dashboard/flagged-witnesses",
+      },
+    ];
+
+    const adminItems = [
+      {
+        icon: <FileText />,
+        label: "All Affidavits",
+        href: "/dashboard/all-affidavits",
+      },
+      {
+        icon: <Users />,
+        label: "User Management",
+        href: "/dashboard/users",
+      },
+      {
+        icon: <UserCheck />,
+        label: "Create User",
+        href: "/dashboard/users/new",
+      },
+      {
+        icon: <Shield />,
+        label: "Issuer Requests",
+        href: "/dashboard/issuer-requests",
+      },
+      {
+        icon: <Flag />,
+        label: "Flagged Witnesses",
+        href: "/dashboard/flagged-witnesses",
+      },
+      {
+        icon: <Users />,
+        label: "Banned Users",
+        href: "/dashboard/banned-users",
+      },
+    ];
+
+    switch (user?.activeRole) {
+      case "Admin":
+        return [...commonItems, ...adminItems];
+      case "Issuer":
+        return [...commonItems, ...issuerItems];
+      default:
+        return [...commonItems, ...userItems];
     }
+  };
 
-    // Issuer-specific items
-    if (user?.role === "Issuer") {
-      return [
-        ...commonItems,
-        {
-          icon: <FileCheck />,
-          label: "Issued Affidavits",
-          href: "/dashboard/issued-affidavits",
-        },
-      ]
-    }
-
-    // Default items for regular users
-    return commonItems
-  }
-
-  const menuItems = getUserMenuItems()
+  const menuItems = getUserMenuItems();
 
   return (
     <Sidebar>
@@ -115,7 +160,6 @@ export function AppSidebar() {
       </SidebarHeader>
       <SidebarSeparator />
       <SidebarContent>
-        {/* Main Navigation */}
         <SidebarGroup>
           <SidebarGroupLabel>Navigation</SidebarGroupLabel>
           <SidebarGroupContent>
@@ -134,7 +178,6 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {/* Logout */}
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
@@ -151,5 +194,5 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
     </Sidebar>
-  )
+  );
 }

@@ -33,6 +33,7 @@ export default function ProfilePage() {
     bio: "",
     walletAddress: "",
   })
+  const [walletAddressError, setWalletAddressError] = useState<string | null>(null)
   const [avatarFile, setAvatarFile] = useState<File | null>(null)
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
   const avatarInputRef = useRef<HTMLInputElement>(null)
@@ -91,7 +92,34 @@ export default function ProfilePage() {
     setPasswordErrors(errors)
   }, [newPassword, formData.name])
 
+  const validateWalletAddress = (address: string): string | null => {
+    if (!address || address.trim() === "") return null // Allow empty
+    if (!/^0x[a-fA-F0-9]{40}$/.test(address)) {
+      return "Wallet address must start with '0x' followed by 40 hexadecimal characters"
+    }
+    return null
+  }
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target
+    setFormData((prev) => ({ ...prev, [name]: value }))
+    if (name === "walletAddress") {
+      setWalletAddressError(validateWalletAddress(value))
+    }
+  }
+
   const handleSaveProfile = async () => {
+    const walletError = validateWalletAddress(formData.walletAddress)
+    if (walletError) {
+      setWalletAddressError(walletError)
+      toast({
+        title: "Error",
+        description: walletError,
+        variant: "destructive",
+      })
+      return
+    }
+
     setIsProfileLoading(true)
     try {
       const response = await fetch("/api/user/profile", {
@@ -132,11 +160,6 @@ export default function ProfilePage() {
     } finally {
       setIsProfileLoading(false)
     }
-  }
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target
-    setFormData((prev) => ({ ...prev, [name]: value }))
   }
 
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -261,7 +284,7 @@ export default function ProfilePage() {
           description: "Your password has been updated successfully. Redirecting to login...",
           className: "bg-green-100 dark:bg-green-900 border-green-500",
         })
-        logout() // Call logout immediately after toast
+        logout()
       } else {
         toast({
           title: "Error",
@@ -422,8 +445,13 @@ export default function ProfilePage() {
                             value={formData.walletAddress}
                             onChange={handleInputChange}
                             placeholder="0x..."
+                            className={walletAddressError ? "border-red-500" : ""}
                           />
-                          <p className="text-xs text-gray-500">Your Ethereum wallet address</p>
+                          {walletAddressError ? (
+                            <p className="text-xs text-red-500">{walletAddressError}</p>
+                          ) : (
+                            <p className="text-xs text-gray-500">Your Ethereum wallet address (optional)</p>
+                          )}
                         </div>
                         <div className="space-y-2">
                           <Label htmlFor="status">Account Status</Label>
@@ -507,7 +535,7 @@ export default function ProfilePage() {
                   </div>
                 </CardContent>
                 <CardFooter className="flex justify-end">
-                  <Button onClick={handleSaveProfile} disabled={isProfileLoading}>
+                  <Button onClick={handleSaveProfile} disabled={isProfileLoading || !!walletAddressError}>
                     {isProfileLoading ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -548,10 +576,10 @@ export default function ProfilePage() {
                       </div>
                       <div className="flex items-center gap-2">
                         <Shield className="h-5 w-5 text-purple-500" />
-                        <span className="font-medium">{user.role}</span>
+                        <span className="font-medium">{user.activeRole}</span>
                       </div>
                     </div>
-                    {user.role === "User" && (
+                    {user.activeRole === "User" && (
                       <>
                         <Separator />
                         <div>

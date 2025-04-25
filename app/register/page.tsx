@@ -90,21 +90,19 @@ export default function RegisterPage() {
     setPasswordErrors(errors)
   }, [password, name])
 
-  // Redirect after successful registration
   useEffect(() => {
     if (isRegistered) {
       const timer = setTimeout(() => {
         try {
           router.push("/login")
         } catch (err) {
-          console.error("Navigation error:", err)
           toast({
             title: "Error",
             description: "Failed to redirect to login page. Please navigate manually.",
             variant: "destructive",
           })
         }
-      }, 2000) // Delay to show toast
+      }, 2000)
       return () => clearTimeout(timer)
     }
   }, [isRegistered, router])
@@ -187,41 +185,36 @@ export default function RegisterPage() {
       return
     }
     setIsLoading(true)
-    try {
-      const formData = new FormData()
-      formData.append("name", name)
-      formData.append("email", email)
-      formData.append("password", password)
-      formData.append("idCardNumber", idCardNumber)
-      if (idCardFront) formData.append("idCardFront", idCardFront)
-      if (idCardBack) formData.append("idCardBack", idCardBack)
-      const result = await register(formData)
-      if (result.success) {
-        toast({
-          title: "Registration successful",
-          description: "Please log in to access your account.",
-        })
-        // Reset form state
-        setName("")
-        setEmail("")
-        setPassword("")
-        setConfirmPassword("")
-        setIdCardNumber("")
-        setIdCardFront(null)
-        setIdCardBack(null)
-        setIdCardFrontPreview(null)
-        setIdCardBackPreview(null)
-        setFormErrors({})
-        setPasswordErrors([])
-        setPasswordStrength(0)
-        setIsRegistered(true) // Trigger redirect via useEffect
-      } else {
-        setError(result.error || "Registration failed")
-        setIsLoading(false)
-      }
-    } catch (err) {
-      console.error("Registration error:", err)
-      setError("An unexpected error occurred")
+
+    const formData = new FormData()
+    formData.append("name", name)
+    formData.append("email", email)
+    formData.append("password", password)
+    formData.append("idCardNumber", idCardNumber)
+    if (idCardFront) formData.append("idCardFront", idCardFront)
+    if (idCardBack) formData.append("idCardBack", idCardBack)
+
+    const result = await register(formData)
+    if (result.success) {
+      toast({
+        title: "Registration successful",
+        description: "Please log in to access your account.",
+      })
+      setName("")
+      setEmail("")
+      setPassword("")
+      setConfirmPassword("")
+      setIdCardNumber("")
+      setIdCardFront(null)
+      setIdCardBack(null)
+      setIdCardFrontPreview(null)
+      setIdCardBackPreview(null)
+      setFormErrors({})
+      setPasswordErrors([])
+      setPasswordStrength(0)
+      setIsRegistered(true)
+    } else {
+      setError(result.error || "An unexpected error occurred")
       setIsLoading(false)
     }
   }

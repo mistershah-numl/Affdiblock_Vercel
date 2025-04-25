@@ -28,35 +28,45 @@ export async function POST(request: Request) {
       {
         id: user._id,
         email: user.email,
-        role: user.role,
+        roles: user.roles,
+        activeRole: user.activeRole,
       },
       JWT_SECRET,
       { expiresIn: "7d" }
     )
 
-    return NextResponse.json({
+    const responseData = {
       success: true,
       user: {
         _id: user._id,
         name: user.name,
         email: user.email,
-        role: user.role,
-        status: user.status,
         phone: user.phone,
         idCardNumber: user.idCardNumber,
-        idCardFrontUrl: user.idCardFrontUrl,
-        idCardBackUrl: user.idCardBackUrl,
         address: user.address,
         bio: user.bio,
         walletAddress: user.walletAddress,
+        walletConnectedAt: user.walletConnectedAt,
+        network: user.network,
+        language: user.language,
+        timezone: user.timezone,
+        sessionTimeout: user.sessionTimeout,
         avatar: user.avatar,
+        idCardFrontUrl: user.idCardFrontUrl,
+        idCardBackUrl: user.idCardBackUrl,
+        status: user.status,
+        roles: user.roles,
+        activeRole: user.activeRole,
         createdAt: user.createdAt,
         updatedAt: user.updatedAt,
       },
       token,
-    })
+    };
+
+    console.log("Login API response:", responseData);
+
+    return NextResponse.json(responseData)
   } catch (error) {
-    console.error("Login error:", error)
     return NextResponse.json({ success: false, error: "Internal server error" }, { status: 500 })
   }
 }

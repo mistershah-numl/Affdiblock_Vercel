@@ -42,7 +42,8 @@ export async function GET(request: Request) {
         address: user.address,
         bio: user.bio,
         walletAddress: user.walletAddress,
-        role: user.role,
+        roles: user.roles,
+        activeRole: user.activeRole,
         status: user.status,
         avatar: user.avatar,
         createdAt: user.createdAt,
@@ -73,6 +74,7 @@ export async function PUT(request: Request) {
     }
 
     const body = await request.json()
+    console.log("PUT /api/user/profile request body:", body);
     const { name, phone, address, bio, walletAddress, avatar } = body
 
     await dbConnect()
@@ -83,7 +85,8 @@ export async function PUT(request: Request) {
       return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
     }
 
-    if (walletAddress && !/^0x[a-fA-F0-9]{40}$/.test(walletAddress)) {
+    // Validate walletAddress only if it's provided and not empty
+    if (walletAddress && walletAddress.trim() !== "" && !/^0x[a-fA-F0-9]{40}$/.test(walletAddress)) {
       return NextResponse.json({ success: false, error: "Invalid wallet address" }, { status: 400 })
     }
 
@@ -91,7 +94,7 @@ export async function PUT(request: Request) {
     if (phone) user.phone = phone
     if (address) user.address = address
     if (bio) user.bio = bio
-    if (walletAddress) user.walletAddress = walletAddress
+    if (walletAddress !== undefined) user.walletAddress = walletAddress.trim() === "" ? undefined : walletAddress
     if (avatar) user.avatar = avatar
 
     await user.save()
@@ -109,7 +112,8 @@ export async function PUT(request: Request) {
         address: user.address,
         bio: user.bio,
         walletAddress: user.walletAddress,
-        role: user.role,
+        roles: user.roles,
+        activeRole: user.activeRole,
         status: user.status,
         avatar: user.avatar,
         createdAt: user.createdAt,

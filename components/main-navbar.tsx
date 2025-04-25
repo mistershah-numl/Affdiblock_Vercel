@@ -22,12 +22,11 @@ import { useAuth } from "@/lib/auth-context"
 export function MainNavbar() {
   const pathname = usePathname()
   const router = useRouter()
-  const { user, isAuthenticated, logout } = useAuth()
+  const { user, isAuthenticated, logout, switchRole } = useAuth()
   const [isScrolled, setIsScrolled] = useState(false)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [mounted, setMounted] = useState(false)
 
-  // Handle scroll event to change navbar appearance
   useEffect(() => {
     const handleScroll = () => {
       setIsScrolled(window.scrollY > 10)
@@ -37,7 +36,6 @@ export function MainNavbar() {
     return () => window.removeEventListener("scroll", handleScroll)
   }, [])
 
-  // Set mounted state when component mounts
   useEffect(() => {
     setMounted(true)
   }, [])
@@ -50,32 +48,77 @@ export function MainNavbar() {
     { name: "Documentation", href: "/docs" },
   ]
 
-  // Check if current path is a dashboard path
   const isDashboardPath = pathname?.startsWith("/dashboard") || pathname?.startsWith("/admin")
 
-  // Handle login
   const handleLogin = () => {
     router.push("/login")
   }
 
-  // Handle register
   const handleRegister = () => {
     router.push("/register")
   }
 
-  // Handle logout
   const handleLogout = () => {
     logout()
     router.push("/")
   }
 
-  // Handle dashboard navigation
   const handleDashboard = () => {
-    if (user?.role === "Admin") {
-      router.push("/dashboard/users")
-    } else {
-      router.push("/dashboard")
-    }
+    router.push("/dashboard")
+  }
+
+  const handleRequestIssuerRole = () => {
+    router.push("/dashboard/request-issuer")
+  }
+
+  const handleRequestAdminRole = () => {
+    router.push("/dashboard/request-admin")
+  }
+
+  const handleRequestUserRole = () => {
+    router.push("/dashboard/request-user") // Adjust the route as needed
+  }
+
+  // Define all possible roles
+  const allRoles = ["User", "Issuer", "Admin"]
+
+  // Generate role-related menu items dynamically
+  const getRoleMenuItems = () => {
+    if (!user || !user.roles) return []
+
+    const menuItems = []
+
+    allRoles.forEach((role) => {
+      if (role === user.activeRole) return // Skip the current active role
+
+      if (user.roles.includes(role)) {
+        // User has this role, show "Switch to [Role]"
+        menuItems.push({
+          label: `Switch to ${role}`,
+          onClick: () => switchRole(role),
+        })
+      } else {
+        // User does not have this role, show "Become a [Role]"
+        if (role === "User") {
+          menuItems.push({
+            label: "Become a User",
+            onClick: handleRequestUserRole,
+          })
+        } else if (role === "Issuer") {
+          menuItems.push({
+            label: "Become an Issuer",
+            onClick: handleRequestIssuerRole,
+          })
+        } else if (role === "Admin") {
+          menuItems.push({
+            label: "Become an Admin",
+            onClick: handleRequestAdminRole,
+          })
+        }
+      }
+    })
+
+    return menuItems
   }
 
   if (!mounted) {
@@ -90,16 +133,13 @@ export function MainNavbar() {
       )}
     >
       <div className="container flex h-14 items-center px-4">
-        {/* Sidebar Trigger (only visible if logged in) */}
         {isAuthenticated && <SidebarTrigger className="mr-2" />}
 
-        {/* Logo */}
         <Link href="/" className="flex items-center gap-2">
           <Shield className="h-6 w-6 text-primary" />
           <span className="font-bold text-lg">AffidBlock</span>
         </Link>
 
-        {/* Navigation links (only visible when not in dashboard and not on mobile) */}
         {!isDashboardPath && (
           <nav className="mx-6 hidden md:flex items-center space-x-4 lg:space-x-6 flex-1">
             {navLinks.map((link) => (
@@ -117,7 +157,6 @@ export function MainNavbar() {
           </nav>
         )}
 
-        {/* Mobile menu button (only visible when not in dashboard) */}
         {!isDashboardPath && (
           <div className="md:hidden flex-1 flex justify-end">
             <Button
@@ -131,13 +170,11 @@ export function MainNavbar() {
           </div>
         )}
 
-        {/* Right side actions */}
         <div className="flex flex-1 items-center justify-end space-x-4">
           <ThemeToggle />
 
-          {isAuthenticated ? (
+          {isAuthenticated && user ? (
             <>
-              {/* Notifications */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="icon" className="relative">
@@ -171,17 +208,21 @@ export function MainNavbar() {
                 </DropdownMenuContent>
               </DropdownMenu>
 
-              {/* User menu */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" className="relative h-8 w-8 rounded-full">
                     <Avatar className="h-8 w-8">
-                      <AvatarFallback>{user?.name?.charAt(0) || "U"}</AvatarFallback>
+                      <AvatarFallback>{user.name?.charAt(0) || "U"}</AvatarFallback>
                     </Avatar>
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-56">
-                  <DropdownMenuLabel>My Account</DropdownMenuLabel>
+                  <DropdownMenuLabel className="font-normal">
+                    <div className="flex flex-col space-y-1">
+                      <p className="text-sm font-medium leading-none">{user.name}</p>
+                      <p className="text-xs leading-none text-muted-foreground capitalize">{user.activeRole}</p>
+                    </div>
+                  </DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={handleDashboard}>
                     <User className="mr-2 h-4 w-4" />
@@ -195,6 +236,13 @@ export function MainNavbar() {
                     <User className="mr-2 h-4 w-4" />
                     <span>Settings</span>
                   </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  {getRoleMenuItems().map((item, index) => (
+                    <DropdownMenuItem key={index} onClick={item.onClick}>
+                      <User className="mr-2 h-4 w-4" />
+                      <span>{item.label}</span>
+                    </DropdownMenuItem>
+                  ))}
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={handleLogout}>
                     <User className="mr-2 h-4 w-4" />
@@ -214,7 +262,6 @@ export function MainNavbar() {
         </div>
       </div>
 
-      {/* Mobile menu (only visible when not in dashboard) */}
       {!isDashboardPath && isMenuOpen && (
         <div className="md:hidden border-t py-4 px-6 bg-background">
           <nav className="flex flex-col space-y-4">
