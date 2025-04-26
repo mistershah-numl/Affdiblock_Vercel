@@ -74,8 +74,8 @@ export async function PUT(request: Request) {
     }
 
     const body = await request.json()
-    console.log("PUT /api/user/profile request body:", body);
-    const { name, phone, address, bio, walletAddress, avatar } = body
+    console.log("PUT /api/user/profile request body:", body)
+    const { name, phone, address, bio, activeRole, avatar } = body
 
     await dbConnect()
 
@@ -85,16 +85,21 @@ export async function PUT(request: Request) {
       return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
     }
 
-    // Validate walletAddress only if it's provided and not empty
-    if (walletAddress && walletAddress.trim() !== "" && !/^0x[a-fA-F0-9]{40}$/.test(walletAddress)) {
-      return NextResponse.json({ success: false, error: "Invalid wallet address" }, { status: 400 })
+    // Validate activeRole if provided
+    if (activeRole) {
+      if (!user.roles.includes(activeRole)) {
+        return NextResponse.json(
+          { success: false, error: "Invalid role selected" },
+          { status: 400 }
+        )
+      }
+      user.activeRole = activeRole
     }
 
     if (name) user.name = name
     if (phone) user.phone = phone
     if (address) user.address = address
     if (bio) user.bio = bio
-    if (walletAddress !== undefined) user.walletAddress = walletAddress.trim() === "" ? undefined : walletAddress
     if (avatar) user.avatar = avatar
 
     await user.save()

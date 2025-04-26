@@ -20,7 +20,6 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Eye, MoreHorizontal, Search, CheckCircle, XCircle, Clock, AlertTriangle, Ban } from "lucide-react"
 import { getIssuedAffidavits, revokeAffidavit } from "@/lib/api/affidavits"
-import DashboardLayout from "@/components/dashboard-layout"
 
 export default function IssuedAffidavitsPage() {
   const router = useRouter()
@@ -126,112 +125,115 @@ export default function IssuedAffidavitsPage() {
   }
 
   return (
-    <DashboardLayout>
-      <div className="space-y-6">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div>
-            <h2 className="text-2xl font-bold">Issued Affidavits</h2>
-            <p className="text-gray-500 dark:text-gray-400">Manage affidavits you have issued</p>
-          </div>
-
-          <div className="relative">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500 dark:text-gray-400" />
-            <Input
-              placeholder="Search affidavits..."
-              className="pl-8 w-full md:w-[250px]"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </div>
+    <div className="flex flex-col gap-6 p-6">
+      {/* Header Section */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Issued Affidavits</h1>
+          <p className="text-gray-500">Manage affidavits you have issued</p>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Your Issued Affidavits</CardTitle>
-            <CardDescription>A list of all affidavits you have issued.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Title</TableHead>
-                  <TableHead>Category</TableHead>
-                  <TableHead>Requester</TableHead>
-                  <TableHead>Date Issued</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Blockchain Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isLoading ? (
-                  <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8">
-                      Loading affidavits...
-                    </TableCell>
-                  </TableRow>
-                ) : filteredAffidavits.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8">
-                      No affidavits found.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredAffidavits.map((affidavit) => (
-                    <TableRow key={affidavit._id}>
-                      <TableCell className="font-medium">{affidavit.title}</TableCell>
-                      <TableCell>{affidavit.category}</TableCell>
-                      <TableCell>{affidavit.requesterName}</TableCell>
-                      <TableCell>
-                        {new Date(affidavit.dateIssued || affidavit.dateRequested).toLocaleDateString()}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          {getStatusIcon(affidavit.status)}
-                          {getStatusBadge(affidavit.status)}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {affidavit.blockchainTxId ? (
-                          <Badge
-                            variant="outline"
-                            className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300"
-                          >
-                            On Blockchain
-                          </Badge>
-                        ) : (
-                          <Badge variant="outline">Pending</Badge>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => handleViewAffidavit(affidavit._id)}>
-                              <Eye className="mr-2 h-4 w-4" />
-                              View Details
-                            </DropdownMenuItem>
-                            {affidavit.status === "Active" && (
-                              <DropdownMenuItem onClick={() => handleOpenRevokeDialog(affidavit)}>
-                                <Ban className="mr-2 h-4 w-4" />
-                                Revoke Affidavit
-                              </DropdownMenuItem>
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+        <div className="relative w-full md:w-64">
+          <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
+          <Input
+            placeholder="Search affidavits..."
+            className="pl-8"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
       </div>
+
+      {/* Affidavits Table Section */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle>Your Issued Affidavits</CardTitle>
+          <CardDescription>A list of all affidavits you have issued.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Title</TableHead>
+                <TableHead>Category</TableHead>
+                <TableHead>Requester</TableHead>
+                <TableHead>Date Issued</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Blockchain Status</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center py-8">
+                    Loading affidavits...
+                  </TableCell>
+                </TableRow>
+              ) : filteredAffidavits.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center py-8">
+                    <div className="flex flex-col items-center justify-center text-gray-500">
+                      <AlertTriangle className="h-10 w-10 mb-2" />
+                      <p>No affidavits found matching your search criteria</p>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredAffidavits.map((affidavit) => (
+                  <TableRow key={affidavit._id}>
+                    <TableCell className="font-medium">{affidavit.title}</TableCell>
+                    <TableCell>{affidavit.category}</TableCell>
+                    <TableCell>{affidavit.requesterName}</TableCell>
+                    <TableCell>
+                      {new Date(affidavit.dateIssued || affidavit.dateRequested).toLocaleDateString()}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        {getStatusIcon(affidavit.status)}
+                        {getStatusBadge(affidavit.status)}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {affidavit.blockchainTxId ? (
+                        <Badge
+                          variant="outline"
+                          className="bg-blue-100 text-blue-800"
+                        >
+                          On Blockchain
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline">Pending</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => handleViewAffidavit(affidavit._id)}>
+                            <Eye className="mr-2 h-4 w-4" />
+                            View Details
+                          </DropdownMenuItem>
+                          {affidavit.status === "Active" && (
+                            <DropdownMenuItem onClick={() => handleOpenRevokeDialog(affidavit)}>
+                              <Ban className="mr-2 h-4 w-4" />
+                              Revoke Affidavit
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
 
       {/* Revoke Affidavit Dialog */}
       <Dialog open={isRevokeDialogOpen} onOpenChange={setIsRevokeDialogOpen}>
@@ -256,7 +258,7 @@ export default function IssuedAffidavitsPage() {
             </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
             <Button variant="outline" onClick={() => setIsRevokeDialogOpen(false)}>
               Cancel
             </Button>
@@ -266,6 +268,6 @@ export default function IssuedAffidavitsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </DashboardLayout>
+    </div>
   )
 }

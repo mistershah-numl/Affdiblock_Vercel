@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { createAffidavitRequest } from "@/lib/api/affidavits"
+import { toast } from "@/components/ui/use-toast"
 
 interface CreateAffidavitDialogProps {
   open: boolean
@@ -142,8 +143,13 @@ export default function CreateAffidavitDialog({ open, onOpenChange }: CreateAffi
   }
 
   const handleSubmit = async () => {
+    // Validation
     if (!title || !category || !issuerId || !description || !declaration || parties.length === 0) {
-      // Show validation error
+      toast({
+        title: "Validation Error",
+        description: "Please fill in all required fields (*). At least one party is required.",
+        variant: "destructive",
+      })
       return
     }
 
@@ -165,14 +171,26 @@ export default function CreateAffidavitDialog({ open, onOpenChange }: CreateAffi
       const response = await createAffidavitRequest(affidavitData)
 
       if (response.success) {
+        toast({
+          title: "Success",
+          description: "Affidavit request created successfully.",
+        })
         onOpenChange(false)
-        router.push("/dashboard/affidavits")
+        router.push("/dashboard") // Adjusted redirect to /dashboard since /dashboard/affidavits may not exist
       } else {
-        // Handle error
-        console.error("Failed to create affidavit request:", response.error)
+        toast({
+          title: "Error",
+          description: "Failed to create affidavit request: " + response.error,
+          variant: "destructive",
+        })
       }
     } catch (error) {
       console.error("Error creating affidavit request:", error)
+      toast({
+        title: "Error",
+        description: "An unexpected error occurred while creating the affidavit request.",
+        variant: "destructive",
+      })
     } finally {
       setIsSubmitting(false)
     }

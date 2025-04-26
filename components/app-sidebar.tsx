@@ -16,6 +16,7 @@ import {
   UserCheck,
   AlertCircle,
 } from "lucide-react"
+import { cn } from "@/lib/utils" // Add this import
 
 import {
   Sidebar,
@@ -33,143 +34,153 @@ import {
 import { useAuth } from "@/lib/auth-context"
 
 export function AppSidebar() {
-  const pathname = usePathname();
-  const { open } = useSidebar();
-  const { isAuthenticated, user, logout } = useAuth();
-  const [mounted, setMounted] = useState(false);
+  const pathname = usePathname()
+  const { open } = useSidebar()
+  const { isAuthenticated, user, logout } = useAuth()
+  const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
-    setMounted(true);
-  }, []);
+    setMounted(true)
+  }, [])
 
-  const isActive = (path: string) => pathname === path;
+  const isActive = (path: string) => pathname === path
 
   if (!mounted || !isAuthenticated || !pathname?.startsWith("/dashboard")) {
-    return null;
+    return null
   }
 
   const getUserMenuItems = () => {
     const commonItems = [
       {
-        icon: <Home />,
+        icon: <Home className="h-5 w-5" />,
         label: "Home",
         href: "/",
       },
       {
-        icon: <LayoutDashboard />,
+        icon: <LayoutDashboard className="h-5 w-5" />,
         label: "Dashboard",
         href: "/dashboard",
       },
       {
-        icon: <Users />,
+        icon: <Users className="h-5 w-5" />,
         label: "Profile",
         href: "/dashboard/profile",
       },
       {
-        icon: <Settings />,
+        icon: <Settings className="h-5 w-5" />,
         label: "Settings",
         href: "/dashboard/settings",
       },
       {
-        icon: <AlertCircle />,
+        icon: <AlertCircle className="h-5 w-5" />,
         label: "Support",
         href: "/dashboard/support",
       },
-    ];
+    ]
 
     const userItems = [
       {
-        icon: <FileText />,
+        icon: <FileText className="h-5 w-5" />,
         label: "My Affidavits",
         href: "/dashboard/affidavits",
       },
-    ];
+    ]
 
     const issuerItems = [
       {
-        icon: <FileText />,
+        icon: <FileText className="h-5 w-5" />,
         label: "Affidavit Requests",
         href: "/dashboard/affidavit-requests",
       },
       {
-        icon: <FileCheck />,
+        icon: <FileCheck className="h-5 w-5" />,
         label: "Issued Affidavits",
         href: "/dashboard/issued-affidavits",
       },
       {
-        icon: <Flag />,
+        icon: <Flag className="h-5 w-5" />,
         label: "Flagged Witnesses",
         href: "/dashboard/flagged-witnesses",
       },
-    ];
+    ]
 
     const adminItems = [
       {
-        icon: <FileText />,
+        icon: <FileText className="h-5 w-5" />,
         label: "All Affidavits",
         href: "/dashboard/all-affidavits",
       },
       {
-        icon: <Users />,
+        icon: <Users className="h-5 w-5" />,
         label: "User Management",
         href: "/dashboard/users",
       },
       {
-        icon: <UserCheck />,
+        icon: <UserCheck className="h-5 w-5" />,
         label: "Create User",
         href: "/dashboard/users/new",
       },
       {
-        icon: <Shield />,
+        icon: <Shield className="h-5 w-5" />,
         label: "Issuer Requests",
         href: "/dashboard/issuer-requests",
       },
       {
-        icon: <Flag />,
+        icon: <Flag className="h-5 w-5" />,
         label: "Flagged Witnesses",
         href: "/dashboard/flagged-witnesses",
       },
       {
-        icon: <Users />,
+        icon: <Users className="h-5 w-5" />,
         label: "Banned Users",
         href: "/dashboard/banned-users",
       },
-    ];
+    ]
 
     switch (user?.activeRole) {
       case "Admin":
-        return [...commonItems, ...adminItems];
+        return [...commonItems, ...adminItems]
       case "Issuer":
-        return [...commonItems, ...issuerItems];
+        return [...commonItems, ...issuerItems]
       default:
-        return [...commonItems, ...userItems];
+        return [...commonItems, ...userItems]
     }
-  };
+  }
 
-  const menuItems = getUserMenuItems();
+  const menuItems = getUserMenuItems()
 
   return (
-    <Sidebar>
-      <SidebarHeader className="flex items-center justify-between">
+    <Sidebar className="border-r">
+      <SidebarHeader className="flex items-center h-14 border-b px-2">
         {open && (
-          <div className="flex items-center gap-2 px-2">
+          <div className="flex items-center gap-2">
             <Shield className="h-6 w-6 text-primary" />
             <span className="text-lg font-bold">AffidBlock</span>
           </div>
         )}
       </SidebarHeader>
       <SidebarSeparator />
-      <SidebarContent>
+      <SidebarContent className="p-4">
         <SidebarGroup>
-          <SidebarGroupLabel>Navigation</SidebarGroupLabel>
+          <SidebarGroupLabel className="px-3 text-xs font-semibold text-muted-foreground">Navigation</SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu>
+            <SidebarMenu className="space-y-2">
               {menuItems.map((item, index) => (
                 <SidebarMenuItem key={index}>
-                  <SidebarMenuButton asChild isActive={isActive(item.href)}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={isActive(item.href)}
+                    className={cn(
+                      "flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                      isActive(item.href)
+                        ? "bg-primary/10 text-primary"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                      !open && "justify-center px-0",
+                    )}
+                  >
                     <Link href={item.href}>
                       {item.icon}
-                      <span>{item.label}</span>
+                      {open && <span className="ml-3">{item.label}</span>}
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -178,14 +189,20 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <SidebarGroup>
+        <SidebarGroup className="mt-auto">
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem>
-                <SidebarMenuButton asChild onClick={() => logout()}>
-                  <button className="w-full flex items-center">
-                    <LogOut />
-                    <span>Logout</span>
+                <SidebarMenuButton
+                  asChild
+                  className={cn(
+                    "flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors text-muted-foreground hover:bg-muted hover:text-foreground",
+                    !open && "justify-center px-0",
+                  )}
+                >
+                  <button onClick={() => logout()} className="w-full flex items-center">
+                    <LogOut className="h-5 w-5" />
+                    {open && <span className="ml-3">Logout</span>}
                   </button>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -194,5 +211,5 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
     </Sidebar>
-  );
+  )
 }

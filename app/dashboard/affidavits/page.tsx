@@ -18,7 +18,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import DashboardLayout from "@/components/dashboard-layout"
 import CreateAffidavitDialog from "@/components/create-affidavit-dialog"
 
 export default function AffidavitsPage() {
@@ -52,7 +51,6 @@ export default function AffidavitsPage() {
         { name: "Witness 1", idCard: "11111-2222222-3" },
         { name: "Witness 2", idCard: "44444-5555555-6" },
       ],
-      // For user-specific filtering
       userId: "user1", // Current user's ID
     },
     {
@@ -195,146 +193,148 @@ export default function AffidavitsPage() {
   }
 
   return (
-    <DashboardLayout>
-      <div className="flex flex-col gap-6">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Affidavits</h1>
-            <p className="text-gray-500">Manage and view all affidavits</p>
-          </div>
-          <Button onClick={() => setIsCreateDialogOpen(true)} className="flex items-center gap-2">
-            <FilePlus className="h-4 w-4" />
-            <span>Request New Affidavit</span>
-          </Button>
+    <div className="flex flex-col gap-6 p-6">
+      {/* Header Section */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Affidavits</h1>
+          <p className="text-gray-500">Manage and view all affidavits</p>
         </div>
+        <Button onClick={() => setIsCreateDialogOpen(true)} className="flex items-center gap-2">
+          <FilePlus className="h-4 w-4" />
+          <span>Request New Affidavit</span>
+        </Button>
+      </div>
 
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle>All Affidavits</CardTitle>
-            <CardDescription>
-              {userRole === "Admin"
-                ? "View and manage all affidavits in the system"
-                : userRole === "Issuer"
-                  ? "View and manage affidavits you've issued"
-                  : "View your affidavits and their status"}
-            </CardDescription>
-            <div className="flex flex-col md:flex-row gap-4 mt-4">
-              <div className="relative flex-1">
-                <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
-                <Input
-                  placeholder="Search affidavits..."
-                  className="pl-8"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </div>
-              <div className="flex flex-col sm:flex-row items-center gap-2">
-                <div className="flex items-center gap-2 w-full sm:w-auto">
-                  <Filter className="h-4 w-4 text-gray-400" />
-                  <Select value={statusFilter} onValueChange={setStatusFilter}>
-                    <SelectTrigger className="w-[180px]">
-                      <SelectValue placeholder="Filter by status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Statuses</SelectItem>
-                      <SelectItem value="active">Active</SelectItem>
-                      <SelectItem value="pending">Pending</SelectItem>
-                      <SelectItem value="rejected">Rejected</SelectItem>
-                      <SelectItem value="revoked">Revoked</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+      {/* Affidavits Table Section */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle>All Affidavits</CardTitle>
+          <CardDescription>
+            {userRole === "Admin"
+              ? "View and manage all affidavits in the system"
+              : userRole === "Issuer"
+              ? "View and manage affidavits you've issued"
+              : "View your affidavits and their status"}
+          </CardDescription>
+
+          {/* Filters Section */}
+          <div className="flex flex-col md:flex-row gap-4 mt-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
+              <Input
+                placeholder="Search affidavits..."
+                className="pl-8"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+            <div className="flex flex-col sm:flex-row items-center gap-2">
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <Filter className="h-4 w-4 text-gray-400" />
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
                   <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder="Filter by category" />
+                    <SelectValue placeholder="Filter by status" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Categories</SelectItem>
-                    <SelectItem value="property">Property</SelectItem>
-                    <SelectItem value="vehicle">Vehicle</SelectItem>
-                    <SelectItem value="business">Business</SelectItem>
-                    <SelectItem value="personal">Personal</SelectItem>
+                    <SelectItem value="all">All Statuses</SelectItem>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="rejected">Rejected</SelectItem>
+                    <SelectItem value="revoked">Revoked</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
+              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Filter by category" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Categories</SelectItem>
+                  <SelectItem value="property">Property</SelectItem>
+                  <SelectItem value="vehicle">Vehicle</SelectItem>
+                  <SelectItem value="business">Business</SelectItem>
+                  <SelectItem value="personal">Personal</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>ID</TableHead>
-                  <TableHead>Title</TableHead>
-                  <TableHead>Category</TableHead>
-                  <TableHead>Issuer</TableHead>
-                  <TableHead>Date Requested</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredAffidavits.length > 0 ? (
-                  filteredAffidavits.map((affidavit) => (
-                    <TableRow key={affidavit.id}>
-                      <TableCell className="font-medium">{affidavit.id}</TableCell>
-                      <TableCell>{affidavit.title}</TableCell>
-                      <TableCell>{affidavit.category}</TableCell>
-                      <TableCell>{affidavit.issuer}</TableCell>
-                      <TableCell>{affidavit.dateRequested}</TableCell>
-                      <TableCell>{getStatusBadge(affidavit.status)}</TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button asChild variant="ghost" size="sm" className="h-8 w-8 p-0">
-                            <Link href={`/affidavit/${affidavit.id}`}>
-                              <Eye className="h-4 w-4" />
-                              <span className="sr-only">View</span>
-                            </Link>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>ID</TableHead>
+                <TableHead>Title</TableHead>
+                <TableHead>Category</TableHead>
+                <TableHead>Issuer</TableHead>
+                <TableHead>Date Requested</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredAffidavits.length > 0 ? (
+                filteredAffidavits.map((affidavit) => (
+                  <TableRow key={affidavit.id}>
+                    <TableCell className="font-medium">{affidavit.id}</TableCell>
+                    <TableCell>{affidavit.title}</TableCell>
+                    <TableCell>{affidavit.category}</TableCell>
+                    <TableCell>{affidavit.issuer}</TableCell>
+                    <TableCell>{affidavit.dateRequested}</TableCell>
+                    <TableCell>{getStatusBadge(affidavit.status)}</TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-2">
+                        <Button asChild variant="ghost" size="sm" className="h-8 w-8 p-0">
+                          <Link href={`/affidavit/${affidavit.id}`}>
+                            <Eye className="h-4 w-4" />
+                            <span className="sr-only">View</span>
+                          </Link>
+                        </Button>
+
+                        {/* Edit button - visible to Admins and Issuers */}
+                        {(userRole === "Admin" || (userRole === "Issuer" && affidavit.issuerId === "issuer1")) && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0"
+                            onClick={() => router.push(`/affidavit/${affidavit.id}/edit`)}
+                          >
+                            <Edit className="h-4 w-4" />
+                            <span className="sr-only">Edit</span>
                           </Button>
+                        )}
 
-                          {/* Edit button - visible to Admins and Issuers */}
-                          {(userRole === "Admin" || (userRole === "Issuer" && affidavit.issuerId === "issuer1")) && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-8 w-8 p-0"
-                              onClick={() => router.push(`/affidavit/${affidavit.id}/edit`)}
-                            >
-                              <Edit className="h-4 w-4" />
-                              <span className="sr-only">Edit</span>
-                            </Button>
-                          )}
-
-                          {/* Delete button - visible only to Admins */}
-                          {userRole === "Admin" && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-8 w-8 p-0 text-red-500 hover:text-red-600 hover:bg-red-50"
-                              onClick={() => handleDeleteClick(affidavit.id)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                              <span className="sr-only">Delete</span>
-                            </Button>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={7} className="text-center py-6">
-                      <div className="flex flex-col items-center justify-center text-gray-500">
-                        <AlertCircle className="h-10 w-10 mb-2" />
-                        <p>No affidavits found matching your search criteria</p>
+                        {/* Delete button - visible only to Admins */}
+                        {userRole === "Admin" && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0 text-red-500 hover:text-red-600 hover:bg-red-50"
+                            onClick={() => handleDeleteClick(affidavit.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            <span className="sr-only">Delete</span>
+                          </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      </div>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center py-6">
+                    <div className="flex flex-col items-center justify-center text-gray-500">
+                      <AlertCircle className="h-10 w-10 mb-2" />
+                      <p>No affidavits found matching your search criteria</p>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
 
       {/* Create Affidavit Dialog */}
       <CreateAffidavitDialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen} />
@@ -358,6 +358,6 @@ export default function AffidavitsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </DashboardLayout>
+    </div>
   )
 }

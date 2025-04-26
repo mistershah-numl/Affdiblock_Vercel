@@ -32,7 +32,7 @@ export default function RootLayout({
                 <MainNavbar />
                 <div className="flex flex-1 w-full">
                   <AppSidebar />
-                  <main className="flex-1 w-full transition-all duration-300 ease-in-out">
+                  <main className="flex-1 w-full p-6 overflow-y-auto transition-all duration-300 ease-in-out">
                     {children}
                   </main>
                 </div>
@@ -45,6 +45,3 @@ export default function RootLayout({
     </html>
   )
 }
-
-
-import './globals.css'

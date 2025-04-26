@@ -31,7 +31,6 @@ import {
   MapPin,
 } from "lucide-react"
 import { getIssuerRequests, approveIssuerRequest, rejectIssuerRequest } from "@/lib/api/users"
-import DashboardLayout from "@/components/dashboard-layout"
 
 export default function IssuerRequestsPage() {
   const router = useRouter()
@@ -148,116 +147,119 @@ export default function IssuerRequestsPage() {
   }
 
   return (
-    <DashboardLayout>
-      <div className="space-y-6">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div>
-            <h2 className="text-2xl font-bold">Issuer Requests</h2>
-            <p className="text-gray-500 dark:text-gray-400">Review and manage requests to become an issuer</p>
-          </div>
-
-          <div className="relative">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500 dark:text-gray-400" />
-            <Input
-              placeholder="Search requests..."
-              className="pl-8 w-full md:w-[250px]"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </div>
+    <div className="flex flex-col gap-6 p-6">
+      {/* Header Section */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Issuer Requests</h1>
+          <p className="text-gray-500">Review and manage requests to become an issuer</p>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Issuer Applications</CardTitle>
-            <CardDescription>Applications from users who want to become issuers</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
+        <div className="relative w-full md:w-64">
+          <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
+          <Input
+            placeholder="Search requests..."
+            className="pl-8"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
+      </div>
+
+      {/* Issuer Requests Table Section */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle>Issuer Applications</CardTitle>
+          <CardDescription>Applications from users who want to become issuers</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Applicant</TableHead>
+                <TableHead>License Number</TableHead>
+                <TableHead>Organization</TableHead>
+                <TableHead>City</TableHead>
+                <TableHead>Application Date</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoading ? (
                 <TableRow>
-                  <TableHead>Applicant</TableHead>
-                  <TableHead>License Number</TableHead>
-                  <TableHead>Organization</TableHead>
-                  <TableHead>City</TableHead>
-                  <TableHead>Application Date</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableCell colSpan={7} className="text-center py-8">
+                    Loading requests...
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isLoading ? (
-                  <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8">
-                      Loading requests...
-                    </TableCell>
-                  </TableRow>
-                ) : filteredRequests.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8">
-                      No issuer requests found.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredRequests.map((request) => (
-                    <TableRow key={request._id}>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <User className="h-4 w-4 text-gray-500" />
-                          <div>
-                            <div className="font-medium">{request.name}</div>
-                            <div className="text-xs text-gray-500">{request.email}</div>
-                          </div>
+              ) : filteredRequests.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center py-8">
+                    <div className="flex flex-col items-center justify-center text-gray-500">
+                      <User className="h-10 w-10 mb-2" />
+                      <p>No issuer requests found matching your search criteria</p>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredRequests.map((request) => (
+                  <TableRow key={request._id}>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <User className="h-4 w-4 text-gray-500" />
+                        <div>
+                          <div className="font-medium">{request.name}</div>
+                          <div className="text-xs text-gray-500">{request.email}</div>
                         </div>
-                      </TableCell>
-                      <TableCell>{request.licenseNumber}</TableCell>
-                      <TableCell>{request.organization}</TableCell>
-                      <TableCell>{request.city}</TableCell>
-                      <TableCell>{new Date(request.createdAt).toLocaleDateString()}</TableCell>
-                      <TableCell>{getStatusBadge(request.status)}</TableCell>
-                      <TableCell className="text-right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => handleViewUser(request.userId)}>
-                              <User className="mr-2 h-4 w-4" />
-                              View Applicant
-                            </DropdownMenuItem>
+                      </div>
+                    </TableCell>
+                    <TableCell>{request.licenseNumber}</TableCell>
+                    <TableCell>{request.organization}</TableCell>
+                    <TableCell>{request.city}</TableCell>
+                    <TableCell>{new Date(request.createdAt).toLocaleDateString()}</TableCell>
+                    <TableCell>{getStatusBadge(request.status)}</TableCell>
+                    <TableCell className="text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => handleViewUser(request.userId)}>
+                            <User className="mr-2 h-4 w-4" />
+                            View Applicant
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => handleViewDocument("License Document", request.licenseDocumentUrl)}
+                          >
+                            <FileText className="mr-2 h-4 w-4" />
+                            View License
+                          </DropdownMenuItem>
+                          {request.certificatesUrl && (
                             <DropdownMenuItem
-                              onClick={() => handleViewDocument("License Document", request.licenseDocumentUrl)}
+                              onClick={() => handleViewDocument("Certificates", request.certificatesUrl)}
                             >
                               <FileText className="mr-2 h-4 w-4" />
-                              View License
+                              View Certificates
                             </DropdownMenuItem>
-                            {request.certificatesUrl && (
-                              <DropdownMenuItem
-                                onClick={() => handleViewDocument("Certificates", request.certificatesUrl)}
-                              >
-                                <FileText className="mr-2 h-4 w-4" />
-                                View Certificates
-                              </DropdownMenuItem>
-                            )}
-                            {request.status === "Pending" && (
-                              <DropdownMenuItem onClick={() => handleOpenReviewDialog(request)}>
-                                <Eye className="mr-2 h-4 w-4" />
-                                Review Application
-                              </DropdownMenuItem>
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      </div>
+                          )}
+                          {request.status === "Pending" && (
+                            <DropdownMenuItem onClick={() => handleOpenReviewDialog(request)}>
+                              <Eye className="mr-2 h-4 w-4" />
+                              Review Application
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
 
       {/* Review Dialog */}
       <Dialog open={isReviewDialogOpen} onOpenChange={setIsReviewDialogOpen}>
@@ -317,7 +319,7 @@ export default function IssuerRequestsPage() {
                 <div className="space-y-4">
                   <div>
                     <Label className="text-sm text-gray-500">Experience</Label>
-                    <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-md mt-1 text-sm">
+                    <div className="p-3 bg-gray-50 rounded-md mt-1 text-sm">
                       {selectedRequest.experience}
                     </div>
                   </div>
@@ -381,22 +383,26 @@ export default function IssuerRequestsPage() {
             </div>
           )}
 
-          <DialogFooter className="flex justify-between">
+          <DialogFooter className="flex flex-col-reverse sm:flex-row sm:justify-between gap-2">
             <Button variant="outline" onClick={() => setIsReviewDialogOpen(false)}>
               Cancel
             </Button>
             {selectedRequest && selectedRequest.status === "Pending" && (
-              <div className="flex gap-2">
+              <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
                 <Button
                   variant="destructive"
                   onClick={handleRejectRequest}
                   disabled={!reviewNotes}
-                  className="flex items-center gap-2"
+                  className="flex items-center gap-2 w-full sm:w-auto"
                 >
                   <XCircle className="h-4 w-4" />
                   Reject
                 </Button>
-                <Button variant="default" onClick={handleApproveRequest} className="flex items-center gap-2">
+                <Button
+                  variant="default"
+                  onClick={handleApproveRequest}
+                  className="flex items-center gap-2 w-full sm:w-auto"
+                >
                   <CheckCircle className="h-4 w-4" />
                   Approve
                 </Button>
@@ -415,7 +421,7 @@ export default function IssuerRequestsPage() {
 
           <div className="flex-1 overflow-auto">
             {previewDocument && (
-              <div className="bg-gray-100 dark:bg-gray-800 rounded-md p-2 h-[500px] flex items-center justify-center">
+              <div className="bg-gray-100 rounded-md p-2 h-[500px] flex items-center justify-center">
                 <img
                   src={previewDocument.url || "/placeholder.svg?height=500&width=700&text=Document+Preview"}
                   alt={previewDocument.title}
@@ -425,11 +431,11 @@ export default function IssuerRequestsPage() {
             )}
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="flex justify-end">
             <Button onClick={() => setIsDocumentPreviewOpen(false)}>Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </DashboardLayout>
+    </div>
   )
 }

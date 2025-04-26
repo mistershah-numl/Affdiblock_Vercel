@@ -19,9 +19,8 @@ import {
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Eye, MoreHorizontal, Search, UserPlus, Ban, Edit } from "lucide-react"
+import { Eye, MoreHorizontal, Search, UserPlus, Ban, Edit, User } from "lucide-react"
 import { getAllUsers, banUser, updateUser } from "@/lib/api/users"
-import DashboardLayout from "@/components/dashboard-layout"
 
 export default function UsersPage() {
   const router = useRouter()
@@ -30,13 +29,11 @@ export default function UsersPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [isLoading, setIsLoading] = useState(true)
 
-  // Ban user dialog state
   const [isBanDialogOpen, setIsBanDialogOpen] = useState(false)
   const [selectedUser, setSelectedUser] = useState<any>(null)
   const [banReason, setBanReason] = useState("")
   const [banDuration, setBanDuration] = useState("Permanent")
 
-  // Edit user dialog state
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [editUserData, setEditUserData] = useState<any>({})
 
@@ -90,7 +87,6 @@ export default function UsersPage() {
     try {
       const response = await banUser(selectedUser._id, banReason, banDuration)
       if (response.success) {
-        // Update the user in the list
         const updatedUsers = users.map((user) =>
           user._id === selectedUser._id ? { ...user, status: "Banned", banReason, banDuration } : user,
         )
@@ -119,7 +115,6 @@ export default function UsersPage() {
     try {
       const response = await updateUser(editUserData._id, editUserData)
       if (response.success) {
-        // Update the user in the list
         const updatedUsers = users.map((user) => (user._id === editUserData._id ? { ...user, ...editUserData } : user))
         setUsers(updatedUsers)
         setIsEditDialogOpen(false)
@@ -143,113 +138,116 @@ export default function UsersPage() {
   }
 
   return (
-    <DashboardLayout>
-      <div className="space-y-6">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div>
-            <h2 className="text-2xl font-bold">User Management</h2>
-            <p className="text-gray-500 dark:text-gray-400">Manage users and issuers in the system</p>
-          </div>
-
-          <div className="flex flex-col sm:flex-row gap-2">
-            <div className="relative">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500 dark:text-gray-400" />
-              <Input
-                placeholder="Search users..."
-                className="pl-8 w-full sm:w-[250px]"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-
-            <Button onClick={() => router.push("/dashboard/users/new")}>
-              <UserPlus className="mr-2 h-4 w-4" />
-              Create User
-            </Button>
-          </div>
+    <div className="flex flex-col gap-6 p-6">
+      {/* Header Section */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">User Management</h1>
+          <p className="text-gray-500">Manage users and issuers in the system</p>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Users</CardTitle>
-            <CardDescription>A list of all users and issuers in the system.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Affidavits</TableHead>
-                  <TableHead>Created</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isLoading ? (
-                  <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8">
-                      Loading users...
-                    </TableCell>
-                  </TableRow>
-                ) : filteredUsers.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8">
-                      No users found.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredUsers.map((user) => (
-                    <TableRow key={user._id}>
-                      <TableCell className="font-medium">{user.name}</TableCell>
-                      <TableCell>{user.email}</TableCell>
-                      <TableCell>
-                        {user.role === "Issuer" ? (
-                          <Badge className="bg-blue-500">Issuer</Badge>
-                        ) : user.role === "Admin" ? (
-                          <Badge className="bg-purple-500">Admin</Badge>
-                        ) : (
-                          <Badge variant="outline">User</Badge>
-                        )}
-                      </TableCell>
-                      <TableCell>{getUserStatusBadge(user.status)}</TableCell>
-                      <TableCell>{user.affidavitsCount || 0}</TableCell>
-                      <TableCell>{new Date(user.createdAt).toLocaleDateString()}</TableCell>
-                      <TableCell className="text-right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => handleViewUser(user._id)}>
-                              <Eye className="mr-2 h-4 w-4" />
-                              View Details
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleOpenEditDialog(user)}>
-                              <Edit className="mr-2 h-4 w-4" />
-                              Edit User
-                            </DropdownMenuItem>
-                            {user.status !== "Banned" && (
-                              <DropdownMenuItem onClick={() => handleOpenBanDialog(user)}>
-                                <Ban className="mr-2 h-4 w-4" />
-                                Ban User
-                              </DropdownMenuItem>
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <div className="relative w-full md:w-64">
+            <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
+            <Input
+              placeholder="Search users..."
+              className="pl-8"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
+
+          <Button onClick={() => router.push("/dashboard/users/new")}>
+            <UserPlus className="mr-2 h-4 w-4" />
+            Create User
+          </Button>
+        </div>
       </div>
+
+      {/* Users Table Section */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle>Users</CardTitle>
+          <CardDescription>A list of all users and issuers in the system.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Email</TableHead>
+                <TableHead>Role</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Affidavits</TableHead>
+                <TableHead>Created</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center py-8">
+                    Loading users...
+                  </TableCell>
+                </TableRow>
+              ) : filteredUsers.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center py-8">
+                    <div className="flex flex-col items-center justify-center text-gray-500">
+                      <User className="h-10 w-10 mb-2" />
+                      <p>No users found matching your search criteria</p>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredUsers.map((user) => (
+                  <TableRow key={user._id}>
+                    <TableCell className="font-medium">{user.name}</TableCell>
+                    <TableCell>{user.email}</TableCell>
+                    <TableCell>
+                      {user.role === "Issuer" ? (
+                        <Badge className="bg-blue-500">Issuer</Badge>
+                      ) : user.role === "Admin" ? (
+                        <Badge className="bg-purple-500">Admin</Badge>
+                      ) : (
+                        <Badge variant="outline">User</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell>{getUserStatusBadge(user.status)}</TableCell>
+                    <TableCell>{user.affidavitsCount || 0}</TableCell>
+                    <TableCell>{new Date(user.createdAt).toLocaleDateString()}</TableCell>
+                    <TableCell className="text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => handleViewUser(user._id)}>
+                            <Eye className="mr-2 h-4 w-4" />
+                            View Details
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleOpenEditDialog(user)}>
+                            <Edit className="mr-2 h-4 w-4" />
+                            Edit User
+                          </DropdownMenuItem>
+                          {user.status !== "Banned" && (
+                            <DropdownMenuItem onClick={() => handleOpenBanDialog(user)}>
+                              <Ban className="mr-2 h-4 w-4" />
+                              Ban User
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
 
       {/* Ban User Dialog */}
       <Dialog open={isBanDialogOpen} onOpenChange={setIsBanDialogOpen}>
@@ -289,7 +287,7 @@ export default function UsersPage() {
             </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
             <Button variant="outline" onClick={() => setIsBanDialogOpen(false)}>
               Cancel
             </Button>
@@ -363,7 +361,7 @@ export default function UsersPage() {
             </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
             <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
               Cancel
             </Button>
@@ -371,6 +369,6 @@ export default function UsersPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </DashboardLayout>
+    </div>
   )
 }

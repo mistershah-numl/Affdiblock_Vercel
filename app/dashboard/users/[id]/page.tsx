@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   User,
@@ -36,7 +37,6 @@ import {
 import { Separator } from "@/components/ui/separator"
 import { getUserById, banUser, updateUser } from "@/lib/api/users"
 import { getUserAffidavits } from "@/lib/api/affidavits"
-import DashboardLayout from "@/components/dashboard-layout"
 
 export default function UserDetailsPage() {
   const router = useRouter()
@@ -47,12 +47,10 @@ export default function UserDetailsPage() {
   const [affidavits, setAffidavits] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
-  // Ban user dialog state
   const [isBanDialogOpen, setIsBanDialogOpen] = useState(false)
   const [banReason, setBanReason] = useState("")
   const [banDuration, setBanDuration] = useState("Permanent")
 
-  // Edit user dialog state
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [editUserData, setEditUserData] = useState<any>({})
 
@@ -65,7 +63,6 @@ export default function UserDetailsPage() {
   const fetchUserData = async () => {
     setIsLoading(true)
     try {
-      // Fetch user details
       const userResponse = await getUserById(userId)
       if (userResponse.success) {
         setUser(userResponse.user)
@@ -77,7 +74,6 @@ export default function UserDetailsPage() {
           status: userResponse.user.status,
         })
 
-        // Fetch user's affidavits
         const affidavitsResponse = await getUserAffidavits(userId)
         if (affidavitsResponse.success) {
           setAffidavits(affidavitsResponse.affidavits)
@@ -102,7 +98,6 @@ export default function UserDetailsPage() {
     try {
       const response = await banUser(user._id, banReason, banDuration)
       if (response.success) {
-        // Update the user data
         setUser({ ...user, status: "Banned", banReason, banDuration })
         setIsBanDialogOpen(false)
       }
@@ -121,7 +116,6 @@ export default function UserDetailsPage() {
     try {
       const response = await updateUser(editUserData._id, editUserData)
       if (response.success) {
-        // Update the user data
         setUser({ ...user, ...editUserData })
         setIsEditDialogOpen(false)
       }
@@ -164,20 +158,20 @@ export default function UserDetailsPage() {
 
   if (isLoading) {
     return (
-      <DashboardLayout>
+      <div className="flex flex-col gap-6 p-6">
         <div className="flex items-center justify-center h-[calc(100vh-200px)]">
           <p>Loading user data...</p>
         </div>
-      </DashboardLayout>
+      </div>
     )
   }
 
   if (!user) {
     return (
-      <DashboardLayout>
+      <div className="flex flex-col gap-6 p-6">
         <div className="flex flex-col items-center justify-center h-[calc(100vh-200px)]">
-          <h2 className="text-2xl font-bold mb-2">User Not Found</h2>
-          <p className="text-gray-500 dark:text-gray-400 mb-4">
+          <h1 className="text-3xl font-bold mb-2">User Not Found</h1>
+          <p className="text-gray-500 mb-4">
             The user you are looking for does not exist or has been deleted.
           </p>
           <Button onClick={() => router.push("/dashboard/users")}>
@@ -185,202 +179,202 @@ export default function UserDetailsPage() {
             Back to Users
           </Button>
         </div>
-      </DashboardLayout>
+      </div>
     )
   }
 
   return (
-    <DashboardLayout>
-      <div className="space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="icon" onClick={() => router.push("/dashboard/users")}>
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-            <h2 className="text-2xl font-bold">User Details</h2>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={handleOpenEditDialog}>
-              <Edit className="mr-2 h-4 w-4" />
-              Edit User
-            </Button>
-
-            {user.status !== "Banned" && (
-              <Button variant="destructive" onClick={handleOpenBanDialog}>
-                <Ban className="mr-2 h-4 w-4" />
-                Ban User
-              </Button>
-            )}
-          </div>
+    <div className="flex flex-col gap-6 p-6">
+      {/* Header Section */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="icon" onClick={() => router.push("/dashboard/users")}>
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <h1 className="text-3xl font-bold tracking-tight">User Details</h1>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-6">
-          {/* User Profile Card */}
-          <Card className="md:col-span-1">
-            <CardHeader>
-              <CardTitle>Profile Information</CardTitle>
-              <CardDescription>User details and account information</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="flex flex-col items-center">
-                <div className="w-24 h-24 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center mb-4">
-                  <User className="h-12 w-12 text-gray-500 dark:text-gray-400" />
-                </div>
-                <h3 className="text-xl font-semibold">{user.name}</h3>
-                <div className="flex items-center gap-2 mt-1">
-                  {user.role === "Issuer" ? (
-                    <Badge className="bg-blue-500">Issuer</Badge>
-                  ) : user.role === "Admin" ? (
-                    <Badge className="bg-purple-500">Admin</Badge>
-                  ) : (
-                    <Badge variant="outline">User</Badge>
-                  )}
-                  {getUserStatusBadge(user.status)}
-                </div>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={handleOpenEditDialog}>
+            <Edit className="mr-2 h-4 w-4" />
+            Edit User
+          </Button>
+
+          {user.status !== "Banned" && (
+            <Button variant="destructive" onClick={handleOpenBanDialog}>
+              <Ban className="mr-2 h-4 w-4" />
+              Ban User
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* User Information Section */}
+      <div className="grid md:grid-cols-3 gap-6">
+        {/* User Profile Card */}
+        <Card className="md:col-span-1">
+          <CardHeader>
+            <CardTitle>Profile Information</CardTitle>
+            <CardDescription>User details and account information</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="flex flex-col items-center">
+              <div className="w-24 h-24 rounded-full bg-gray-200 flex items-center justify-center mb-4">
+                <User className="h-12 w-12 text-gray-500" />
               </div>
-
-              <Separator />
-
-              <div className="space-y-4">
-                <div className="flex items-start gap-2">
-                  <Mail className="h-5 w-5 text-gray-500 mt-0.5" />
-                  <div>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">Email</p>
-                    <p>{user.email}</p>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-2">
-                  <Shield className="h-5 w-5 text-gray-500 mt-0.5" />
-                  <div>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">ID Card Number</p>
-                    <p>{user.idCardNumber}</p>
-                  </div>
-                </div>
-
-                {user.walletAddress && (
-                  <div className="flex items-start gap-2">
-                    <Wallet className="h-5 w-5 text-gray-500 mt-0.5" />
-                    <div>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">Wallet Address</p>
-                      <p className="text-sm break-all">{user.walletAddress}</p>
-                    </div>
-                  </div>
+              <h3 className="text-xl font-semibold">{user.name}</h3>
+              <div className="flex items-center gap-2 mt-1">
+                {user.role === "Issuer" ? (
+                  <Badge className="bg-blue-500">Issuer</Badge>
+                ) : user.role === "Admin" ? (
+                  <Badge className="bg-purple-500">Admin</Badge>
+                ) : (
+                  <Badge variant="outline">User</Badge>
                 )}
+                {getUserStatusBadge(user.status)}
+              </div>
+            </div>
 
+            <Separator />
+
+            <div className="space-y-4">
+              <div className="flex items-start gap-2">
+                <Mail className="h-5 w-5 text-gray-500 mt-0.5" />
+                <div>
+                  <p className="text-sm text-gray-500">Email</p>
+                  <p>{user.email}</p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-2">
+                <Shield className="h-5 w-5 text-gray-500 mt-0.5" />
+                <div>
+                  <p className="text-sm text-gray-500">ID Card Number</p>
+                  <p>{user.idCardNumber}</p>
+                </div>
+              </div>
+
+              {user.walletAddress && (
                 <div className="flex items-start gap-2">
-                  <Calendar className="h-5 w-5 text-gray-500 mt-0.5" />
+                  <Wallet className="h-5 w-5 text-gray-500 mt-0.5" />
                   <div>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">Joined</p>
-                    <p>{new Date(user.createdAt).toLocaleDateString()}</p>
-                  </div>
-                </div>
-
-                {user.status === "Banned" && (
-                  <div className="flex items-start gap-2">
-                    <Ban className="h-5 w-5 text-red-500 mt-0.5" />
-                    <div>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">Ban Information</p>
-                      <p className="text-sm">{user.banReason}</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Duration: {user.banDuration}</p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* ID Card Images */}
-          <Card className="md:col-span-2">
-            <CardHeader>
-              <CardTitle>Identification Documents</CardTitle>
-              <CardDescription>ID card and verification documents</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">ID Card (Front)</p>
-                  <div className="border rounded-md overflow-hidden">
-                    <img
-                      src={user.idCardFrontUrl || "/placeholder.svg?height=200&width=320&text=ID+Card+Front"}
-                      alt="ID Card Front"
-                      className="w-full h-auto"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">ID Card (Back)</p>
-                  <div className="border rounded-md overflow-hidden">
-                    <img
-                      src={user.idCardBackUrl || "/placeholder.svg?height=200&width=320&text=ID+Card+Back"}
-                      alt="ID Card Back"
-                      className="w-full h-auto"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {user.role === "Issuer" && (
-                <div className="mt-6">
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">License Document</p>
-                  <div className="border rounded-md overflow-hidden">
-                    <img
-                      src={user.licenseDocumentUrl || "/placeholder.svg?height=200&width=640&text=License+Document"}
-                      alt="License Document"
-                      className="w-full h-auto"
-                    />
+                    <p className="text-sm text-gray-500">Wallet Address</p>
+                    <p className="text-sm break-all">{user.walletAddress}</p>
                   </div>
                 </div>
               )}
-            </CardContent>
-          </Card>
-        </div>
 
-        {/* Affidavits Tab */}
-        <Card>
+              <div className="flex items-start gap-2">
+                <Calendar className="h-5 w-5 text-gray-500 mt-0.5" />
+                <div>
+                  <p className="text-sm text-gray-500">Joined</p>
+                  <p>{new Date(user.createdAt).toLocaleDateString()}</p>
+                </div>
+              </div>
+
+              {user.status === "Banned" && (
+                <div className="flex items-start gap-2">
+                  <Ban className="h-5 w-5 text-red-500 mt-0.5" />
+                  <div>
+                    <p className="text-sm text-gray-500">Ban Information</p>
+                    <p className="text-sm">{user.banReason}</p>
+                    <p className="text-xs text-gray-500 mt-1">Duration: {user.banDuration}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* ID Card Images */}
+        <Card className="md:col-span-2">
           <CardHeader>
-            <CardTitle>User Affidavits</CardTitle>
-            <CardDescription>All affidavits associated with this user</CardDescription>
+            <CardTitle>Identification Documents</CardTitle>
+            <CardDescription>ID card and verification documents</CardDescription>
           </CardHeader>
           <CardContent>
-            <Tabs defaultValue="all">
-              <TabsList className="mb-4">
-                <TabsTrigger value="all">All</TabsTrigger>
-                <TabsTrigger value="active">Active</TabsTrigger>
-                <TabsTrigger value="pending">Pending</TabsTrigger>
-                <TabsTrigger value="rejected">Rejected</TabsTrigger>
-              </TabsList>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <p className="text-sm text-gray-500 mb-2">ID Card (Front)</p>
+                <div className="border rounded-md overflow-hidden">
+                  <img
+                    src={user.idCardFrontUrl || "/placeholder.svg?height=200&width=320&text=ID+Card+Front"}
+                    alt="ID Card Front"
+                    className="w-full h-auto"
+                  />
+                </div>
+              </div>
 
-              <TabsContent value="all">
-                <AffidavitsTable affidavits={affidavits} onViewAffidavit={handleViewAffidavit} />
-              </TabsContent>
+              <div>
+                <p className="text-sm text-gray-500 mb-2">ID Card (Back)</p>
+                <div className="border rounded-md overflow-hidden">
+                  <img
+                    src={user.idCardBackUrl || "/placeholder.svg?height=200&width=320&text=ID+Card+Back"}
+                    alt="ID Card Back"
+                    className="w-full h-auto"
+                  />
+                </div>
+              </div>
+            </div>
 
-              <TabsContent value="active">
-                <AffidavitsTable
-                  affidavits={affidavits.filter((a) => a.status === "Active")}
-                  onViewAffidavit={handleViewAffidavit}
-                />
-              </TabsContent>
-
-              <TabsContent value="pending">
-                <AffidavitsTable
-                  affidavits={affidavits.filter((a) => a.status === "Pending")}
-                  onViewAffidavit={handleViewAffidavit}
-                />
-              </TabsContent>
-
-              <TabsContent value="rejected">
-                <AffidavitsTable
-                  affidavits={affidavits.filter((a) => a.status === "Rejected" || a.status === "Revoked")}
-                  onViewAffidavit={handleViewAffidavit}
-                />
-              </TabsContent>
-            </Tabs>
+            {user.role === "Issuer" && (
+              <div className="mt-6">
+                <p className="text-sm text-gray-500 mb-2">License Document</p>
+                <div className="border rounded-md overflow-hidden">
+                  <img
+                    src={user.licenseDocumentUrl || "/placeholder.svg?height=200&width=640&text=License+Document"}
+                    alt="License Document"
+                    className="w-full h-auto"
+                  />
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
+
+      {/* Affidavits Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle>User Affidavits</CardTitle>
+          <CardDescription>All affidavits associated with this user</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Tabs defaultValue="all">
+            <TabsList className="mb-4">
+              <TabsTrigger value="all">All</TabsTrigger>
+              <TabsTrigger value="active">Active</TabsTrigger>
+              <TabsTrigger value="pending">Pending</TabsTrigger>
+              <TabsTrigger value="rejected">Rejected</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="all">
+              <AffidavitsTable affidavits={affidavits} onViewAffidavit={handleViewAffidavit} />
+            </TabsContent>
+
+            <TabsContent value="active">
+              <AffidavitsTable
+                affidavits={affidavits.filter((a) => a.status === "Active")}
+                onViewAffidavit={handleViewAffidavit}
+              />
+            </TabsContent>
+
+            <TabsContent value="pending">
+              <AffidavitsTable
+                affidavits={affidavits.filter((a) => a.status === "Pending")}
+                onViewAffidavit={handleViewAffidavit}
+              />
+            </TabsContent>
+
+            <TabsContent value="rejected">
+              <AffidavitsTable
+                affidavits={affidavits.filter((a) => a.status === "Rejected" || a.status === "Revoked")}
+                onViewAffidavit={handleViewAffidavit}
+              />
+            </TabsContent>
+          </Tabs>
+        </CardContent>
+      </Card>
 
       {/* Ban User Dialog */}
       <Dialog open={isBanDialogOpen} onOpenChange={setIsBanDialogOpen}>
@@ -420,7 +414,7 @@ export default function UserDetailsPage() {
             </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
             <Button variant="outline" onClick={() => setIsBanDialogOpen(false)}>
               Cancel
             </Button>
@@ -442,9 +436,8 @@ export default function UserDetailsPage() {
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label htmlFor="editName">Name</Label>
-              <input
+              <Input
                 id="editName"
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                 value={editUserData.name || ""}
                 onChange={(e) => setEditUserData({ ...editUserData, name: e.target.value })}
               />
@@ -452,10 +445,9 @@ export default function UserDetailsPage() {
 
             <div className="space-y-2">
               <Label htmlFor="editEmail">Email</Label>
-              <input
+              <Input
                 id="editEmail"
                 type="email"
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                 value={editUserData.email || ""}
                 onChange={(e) => setEditUserData({ ...editUserData, email: e.target.value })}
               />
@@ -496,7 +488,7 @@ export default function UserDetailsPage() {
             </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
             <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
               Cancel
             </Button>
@@ -504,7 +496,7 @@ export default function UserDetailsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </DashboardLayout>
+    </div>
   )
 }
 

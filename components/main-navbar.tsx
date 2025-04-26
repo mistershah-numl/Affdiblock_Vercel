@@ -76,7 +76,7 @@ export function MainNavbar() {
   }
 
   const handleRequestUserRole = () => {
-    router.push("/dashboard/request-user") // Adjust the route as needed
+    router.push("/dashboard/request-user")
   }
 
   // Define all possible roles
@@ -86,7 +86,7 @@ export function MainNavbar() {
   const getRoleMenuItems = () => {
     if (!user || !user.roles) return []
 
-    const menuItems = []
+    const menuItems: { label: string; onClick: () => void }[] = []
 
     allRoles.forEach((role) => {
       if (role === user.activeRole) return // Skip the current active role
@@ -132,7 +132,7 @@ export function MainNavbar() {
         isScrolled ? "shadow-sm" : "",
       )}
     >
-      <div className="container flex h-14 items-center px-4">
+      <div className="container flex h-16 items-center px-4">
         {isAuthenticated && <SidebarTrigger className="mr-2" />}
 
         <Link href="/" className="flex items-center gap-2">

@@ -19,7 +19,6 @@ import {
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { AlertTriangle, MoreHorizontal, Search, User, FileText, CheckCircle, XCircle } from "lucide-react"
-import DashboardLayout from "@/components/dashboard-layout"
 
 export default function FlaggedWitnessesPage() {
   const router = useRouter()
@@ -162,107 +161,110 @@ export default function FlaggedWitnessesPage() {
   }
 
   return (
-    <DashboardLayout>
-      <div className="space-y-6">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div>
-            <h2 className="text-2xl font-bold">Flagged Witnesses</h2>
-            <p className="text-gray-500 dark:text-gray-400">
-              Review and manage witnesses that have been flagged as potentially fraudulent
-            </p>
-          </div>
-
-          <div className="relative">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500 dark:text-gray-400" />
-            <Input
-              placeholder="Search witnesses..."
-              className="pl-8 w-full md:w-[250px]"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </div>
+    <div className="flex flex-col gap-6 p-6">
+      {/* Header Section */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Flagged Witnesses</h1>
+          <p className="text-gray-500">
+            Review and manage witnesses that have been flagged as potentially fraudulent
+          </p>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Flagged Witnesses</CardTitle>
-            <CardDescription>Witnesses that have been flagged for suspicious activity</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Witness</TableHead>
-                  <TableHead>Affidavit</TableHead>
-                  <TableHead>Flagged By</TableHead>
-                  <TableHead>Flagged Date</TableHead>
-                  <TableHead>Reason</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isLoading ? (
-                  <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8">
-                      Loading witnesses...
-                    </TableCell>
-                  </TableRow>
-                ) : filteredWitnesses.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8">
-                      No flagged witnesses found.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredWitnesses.map((witness) => (
-                    <TableRow key={witness.id}>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <User className="h-4 w-4 text-gray-500" />
-                          <span className="font-medium">{witness.name}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>{witness.affidavitTitle}</TableCell>
-                      <TableCell>{witness.flaggedBy}</TableCell>
-                      <TableCell>{witness.flaggedDate}</TableCell>
-                      <TableCell className="max-w-xs truncate" title={witness.reason}>
-                        {witness.reason}
-                      </TableCell>
-                      <TableCell>{getStatusBadge(witness.status)}</TableCell>
-                      <TableCell className="text-right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => handleViewWitness(witness.userId)}>
-                              <User className="mr-2 h-4 w-4" />
-                              View Witness
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleViewAffidavit(witness.affidavitId)}>
-                              <FileText className="mr-2 h-4 w-4" />
-                              View Affidavit
-                            </DropdownMenuItem>
-                            {witness.status === "Pending Review" && (
-                              <DropdownMenuItem onClick={() => handleOpenReviewDialog(witness)}>
-                                <AlertTriangle className="mr-2 h-4 w-4" />
-                                Review Flag
-                              </DropdownMenuItem>
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+        <div className="relative w-full md:w-64">
+          <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
+          <Input
+            placeholder="Search witnesses..."
+            className="pl-8"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
       </div>
+
+      {/* Witnesses Table Section */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle>Flagged Witnesses</CardTitle>
+          <CardDescription>Witnesses that have been flagged for suspicious activity</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Witness</TableHead>
+                <TableHead>Affidavit</TableHead>
+                <TableHead>Flagged By</TableHead>
+                <TableHead>Flagged Date</TableHead>
+                <TableHead>Reason</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center py-8">
+                    Loading witnesses...
+                  </TableCell>
+                </TableRow>
+              ) : filteredWitnesses.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center py-8">
+                    <div className="flex flex-col items-center justify-center text-gray-500">
+                      <AlertTriangle className="h-10 w-10 mb-2" />
+                      <p>No flagged witnesses found matching your search criteria</p>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredWitnesses.map((witness) => (
+                  <TableRow key={witness.id}>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <User className="h-4 w-4 text-gray-500" />
+                        <span className="font-medium">{witness.name}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell>{witness.affidavitTitle}</TableCell>
+                    <TableCell>{witness.flaggedBy}</TableCell>
+                    <TableCell>{witness.flaggedDate}</TableCell>
+                    <TableCell className="max-w-xs truncate" title={witness.reason}>
+                      {witness.reason}
+                    </TableCell>
+                    <TableCell>{getStatusBadge(witness.status)}</TableCell>
+                    <TableCell className="text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => handleViewWitness(witness.userId)}>
+                            <User className="mr-2 h-4 w-4" />
+                            View Witness
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleViewAffidavit(witness.affidavitId)}>
+                            <FileText className="mr-2 h-4 w-4" />
+                            View Affidavit
+                          </DropdownMenuItem>
+                          {witness.status === "Pending Review" && (
+                            <DropdownMenuItem onClick={() => handleOpenReviewDialog(witness)}>
+                              <AlertTriangle className="mr-2 h-4 w-4" />
+                              Review Flag
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
 
       {/* Review Dialog */}
       <Dialog open={isReviewDialogOpen} onOpenChange={setIsReviewDialogOpen}>
@@ -276,7 +278,7 @@ export default function FlaggedWitnessesPage() {
             <div className="space-y-4 py-4">
               <div className="space-y-2">
                 <Label>Witness</Label>
-                <div className="flex items-center gap-2 p-2 bg-gray-100 dark:bg-gray-800 rounded-md">
+                <div className="flex items-center gap-2 p-2 bg-gray-100 rounded-md">
                   <User className="h-5 w-5 text-gray-500" />
                   <span className="font-medium">{selectedWitness.name}</span>
                 </div>
@@ -284,22 +286,22 @@ export default function FlaggedWitnessesPage() {
 
               <div className="space-y-2">
                 <Label>Affidavit</Label>
-                <div className="p-2 bg-gray-100 dark:bg-gray-800 rounded-md">{selectedWitness.affidavitTitle}</div>
+                <div className="p-2 bg-gray-100 rounded-md">{selectedWitness.affidavitTitle}</div>
               </div>
 
               <div className="space-y-2">
                 <Label>Flagged By</Label>
-                <div className="p-2 bg-gray-100 dark:bg-gray-800 rounded-md">{selectedWitness.flaggedBy}</div>
+                <div className="p-2 bg-gray-100 rounded-md">{selectedWitness.flaggedBy}</div>
               </div>
 
               <div className="space-y-2">
                 <Label>Reason</Label>
-                <div className="p-2 bg-gray-100 dark:bg-gray-800 rounded-md">{selectedWitness.reason}</div>
+                <div className="p-2 bg-gray-100 rounded-md">{selectedWitness.reason}</div>
               </div>
 
               <div className="space-y-2">
                 <Label>Evidence</Label>
-                <div className="p-2 bg-gray-100 dark:bg-gray-800 rounded-md">{selectedWitness.evidence}</div>
+                <div className="p-2 bg-gray-100 rounded-md">{selectedWitness.evidence}</div>
               </div>
 
               <div className="space-y-2">
@@ -315,15 +317,15 @@ export default function FlaggedWitnessesPage() {
             </div>
           )}
 
-          <DialogFooter className="flex justify-between">
+          <DialogFooter className="flex flex-col-reverse sm:flex-row sm:justify-between gap-2">
             <Button variant="outline" onClick={() => setIsReviewDialogOpen(false)}>
               Cancel
             </Button>
-            <div className="flex gap-2">
+            <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
               <Button
                 variant="destructive"
                 onClick={() => handleReviewWitness("confirm")}
-                className="flex items-center gap-2"
+                className="flex items-center gap-2 w-full sm:w-auto"
               >
                 <XCircle className="h-4 w-4" />
                 Confirm as Fake
@@ -331,7 +333,7 @@ export default function FlaggedWitnessesPage() {
               <Button
                 variant="default"
                 onClick={() => handleReviewWitness("clear")}
-                className="flex items-center gap-2"
+                className="flex items-center gap-2 w-full sm:w-auto"
               >
                 <CheckCircle className="h-4 w-4" />
                 Clear Witness
@@ -340,6 +342,6 @@ export default function FlaggedWitnessesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </DashboardLayout>
+    </div>
   )
 }
