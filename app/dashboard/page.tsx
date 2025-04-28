@@ -33,9 +33,31 @@ const CreateAffidavitDialog = dynamicImport(() => import("@/components/create-af
   loading: () => <div>Loading affidavit dialog...</div>,
 })
 
+// Define interfaces for TypeScript
+interface Affidavit {
+  id: string
+  title: string
+  category: string
+  dateIssued: string
+  parties: string
+  status: string
+}
+
+interface User {
+  _id: string
+  name: string
+  email: string
+  roles: string[]
+  activeRole: string
+  createdAt: string
+  status: string
+  idCardNumber?: string
+  formattedIdCardNumber?: string
+}
+
 export default function DashboardPage() {
   const router = useRouter()
-  const { user, isLoading, isAuthenticated } = useAuth()
+  const { user, isLoading, isAuthenticated, token } = useAuth()
   const [isClient, setIsClient] = useState(false)
 
   // Ensure the component only renders on the client side after mounting
@@ -68,10 +90,24 @@ export default function DashboardPage() {
     return <div className="flex flex-col gap-6 p-6"></div>
   }
 
+  // Check if user.activeRole exists in user.roles
+  const hasAccess = user.roles.includes(user.activeRole)
+
+  if (!hasAccess) {
+    return (
+      <div className="flex flex-col gap-6 p-6">
+        <div className="text-red-500">
+          Access Denied: Your active role "{user.activeRole}" is not in your assigned roles.
+        </div>
+      </div>
+    )
+  }
+
   // Render different dashboards based on the user's active role
   switch (user.activeRole) {
     case "Admin":
-      return <AdminDashboard />
+      // Ensure token is a string before passing it
+      return token ? <AdminDashboard token={token} /> : null
     case "Issuer":
       return <IssuerDashboard />
     case "User":
@@ -85,22 +121,72 @@ export default function DashboardPage() {
   }
 }
 
-// Admin Dashboard Component (unchanged)
-function AdminDashboard() {
+// Admin Dashboard Component (Updated)
+function AdminDashboard({ token }: { token: string }) {
+  const router = useRouter()
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
+  const [users, setUsers] = useState<User[]>([])
+  const [isUsersLoading, setIsUsersLoading] = useState(true)
+
+  // Fetch users when the component mounts
+  useEffect(() => {
+    fetchUsers()
+  }, [])
+
+  const fetchUsers = async () => {
+    setIsUsersLoading(true)
+    try {
+      const response = await fetch("/api/user", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+      const data = await response.json()
+      if (data.success) {
+        // Format idCardNumber for each user
+        const formattedUsers = data.users.map((user: any) => {
+          let formattedIdCard = "N/A"
+          if (user.idCardNumber && /^\d{13}$/.test(user.idCardNumber)) {
+            const id = user.idCardNumber
+            formattedIdCard = `${id.slice(0, 5)}-${id.slice(5, 12)}-${id.slice(12)}`
+          }
+          return { ...user, formattedIdCardNumber: formattedIdCard }
+        })
+        setUsers(formattedUsers)
+      } else {
+        toast({
+          title: "Error",
+          description: data.error || "Failed to fetch users",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error("Error fetching users:", error)
+      toast({
+        title: "Error",
+        description: "An unexpected error occurred while fetching users",
+        variant: "destructive",
+      })
+    } finally {
+      setIsUsersLoading(false)
+    }
+  }
+
+  // Calculate total issuers by filtering users with the "Issuer" role
+  const totalIssuers = users.filter((user) => user.roles.includes("Issuer")).length
 
   const stats = [
     {
       title: "Total Users",
-      value: "124",
+      value: users.length.toString(), // Dynamically set the total users
       icon: <Users className="h-5 w-5 text-blue-500" />,
       change: "+12 from last month",
       trend: "up",
     },
     {
       title: "Total Issuers",
-      value: "18",
+      value: totalIssuers.toString(), // Dynamically set the total issuers
       icon: <Users className="h-5 w-5 text-purple-500" />,
       change: "+3 from last month",
       trend: "up",
@@ -118,49 +204,6 @@ function AdminDashboard() {
       icon: <Clock className="h-5 w-5 text-orange-500" />,
       change: "+5 from last week",
       trend: "up",
-    },
-  ]
-
-  const users = [
-    {
-      id: "USR-001",
-      name: "John Doe",
-      email: "john.doe@example.com",
-      role: "User",
-      status: "Active",
-      joinDate: "2025-01-15",
-    },
-    {
-      id: "USR-002",
-      name: "Jane Smith",
-      email: "jane.smith@example.com",
-      role: "Issuer",
-      status: "Active",
-      joinDate: "2025-01-20",
-    },
-    {
-      id: "USR-003",
-      name: "Robert Johnson",
-      email: "robert.johnson@example.com",
-      role: "User",
-      status: "Inactive",
-      joinDate: "2025-02-05",
-    },
-    {
-      id: "USR-004",
-      name: "Sarah Williams",
-      email: "sarah.williams@example.com",
-      role: "Issuer",
-      status: "Pending",
-      joinDate: "2025-02-28",
-    },
-    {
-      id: "USR-005",
-      name: "Michael Brown",
-      email: "michael.brown@example.com",
-      role: "Admin",
-      status: "Active",
-      joinDate: "2024-12-10",
     },
   ]
 
@@ -286,9 +329,18 @@ function AdminDashboard() {
     (user) =>
       user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.role.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.id.toLowerCase().includes(searchQuery.toLowerCase()),
+      user.roles.some((role: string) => role.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      user._id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (user.formattedIdCardNumber !== "N/A" && user.formattedIdCardNumber.toLowerCase().includes(searchQuery.toLowerCase())),
   )
+
+  const handleViewUser = (userId: string) => {
+    router.push(`/dashboard/users/${userId}`)
+  }
+
+  const handleEditUser = (user: User) => {
+    router.push(`/dashboard/users/edit/${user._id}`)
+  }
 
   return (
     <ProtectedRoute>
@@ -419,31 +471,68 @@ function AdminDashboard() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>ID</TableHead>
+                      <TableHead>ID Card Number</TableHead>
                       <TableHead>Name</TableHead>
                       <TableHead>Email</TableHead>
-                      <TableHead>Role</TableHead>
+                      <TableHead>Roles</TableHead>
                       <TableHead>Join Date</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredUsers.map((user) => (
-                      <TableRow key={user.id}>
-                        <TableCell className="font-medium">{user.id}</TableCell>
-                        <TableCell>{user.name}</TableCell>
-                        <TableCell>{user.email}</TableCell>
-                        <TableCell>{getRoleBadge(user.role)}</TableCell>
-                        <TableCell>{user.joinDate}</TableCell>
-                        <TableCell>{getStatusBadge(user.status)}</TableCell>
-                        <TableCell className="text-right">
-                          <Button variant="ghost" size="sm">
-                            Edit
-                          </Button>
+                    {isUsersLoading ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center py-8">
+                          Loading users...
                         </TableCell>
                       </TableRow>
-                    ))}
+                    ) : filteredUsers.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center py-8">
+                          <div className="flex flex-col items-center justify-center text-gray-500">
+                            <Users className="h-10 w-10 mb-2" />
+                            <p>No users found matching your search criteria</p>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      filteredUsers.map((user) => (
+                        <TableRow key={user._id}>
+                          <TableCell className="font-medium">{user.formattedIdCardNumber}</TableCell>
+                          <TableCell>{user.name}</TableCell>
+                          <TableCell>{user.email}</TableCell>
+                          <TableCell>
+                            <div className="flex flex-col gap-1">
+                              {user.roles.map((role: string) => (
+                                <span key={role} className="inline-block">{getRoleBadge(role)}</span>
+                              ))}
+                            </div>
+                          </TableCell>
+                          <TableCell>{new Date(user.createdAt).toLocaleDateString()}</TableCell>
+                          <TableCell>{getStatusBadge(user.status)}</TableCell>
+                          <TableCell className="text-right">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon">
+                                  <MoreVertical className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => handleViewUser(user._id)}>
+                                  <Eye className="mr-2 h-4 w-4" />
+                                  View Details
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleEditUser(user)}>
+                                  <Edit className="mr-2 h-4 w-4" />
+                                  Edit User
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
                   </TableBody>
                 </Table>
               </CardContent>
@@ -516,12 +605,12 @@ function AdminDashboard() {
   )
 }
 
-// Issuer Dashboard Component (Updated)
+// Issuer Dashboard Component (Unchanged)
 function IssuerDashboard() {
   const [searchQuery, setSearchQuery] = useState("")
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false)
   const [isStatusDialogOpen, setIsStatusDialogOpen] = useState(false)
-  const [selectedAffidavit, setSelectedAffidavit] = useState(null)
+  const [selectedAffidavit, setSelectedAffidavit] = useState<Affidavit | null>(null)
 
   const stats = [
     {
@@ -554,7 +643,7 @@ function IssuerDashboard() {
     },
   ]
 
-  const affidavits = [
+  const affidavits: Affidavit[] = [
     {
       id: "AFF-2025-001",
       title: "Property Transfer Deed",
@@ -622,17 +711,17 @@ function IssuerDashboard() {
       affidavit.parties.toLowerCase().includes(searchQuery.toLowerCase()),
   )
 
-  const handleViewAffidavit = (affidavit) => {
+  const handleViewAffidavit = (affidavit: Affidavit) => {
     setSelectedAffidavit(affidavit)
     setIsViewDialogOpen(true)
   }
 
-  const handleChangeStatus = (affidavit) => {
+  const handleChangeStatus = (affidavit: Affidavit) => {
     setSelectedAffidavit(affidavit)
     setIsStatusDialogOpen(true)
   }
 
-  const handleMarkFakeWitnesses = (affidavit) => {
+  const handleMarkFakeWitnesses = (affidavit: Affidavit) => {
     toast({
       title: "Fake Witnesses Marked",
       description: `Witnesses for affidavit ${affidavit.id} have been flagged as fake.`,
@@ -861,7 +950,7 @@ function IssuerDashboard() {
   )
 }
 
-// User Dashboard Component (unchanged)
+// User Dashboard Component (Unchanged)
 function UserDashboard() {
   const { user, isAuthenticated, isLoading, logout } = useAuth()
   const router = useRouter()

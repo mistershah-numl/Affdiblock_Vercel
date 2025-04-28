@@ -20,10 +20,12 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Eye, MoreHorizontal, Search, UserPlus, Ban, Edit, User } from "lucide-react"
-import { getAllUsers, banUser, updateUser } from "@/lib/api/users"
+import { useAuth } from "@/lib/auth-context"
+import { banUser, updateUser } from "@/lib/api/users"
 
 export default function UsersPage() {
   const router = useRouter()
+  const { user, token, isLoading: isAuthLoading, isAuthenticated } = useAuth()
   const [users, setUsers] = useState<any[]>([])
   const [filteredUsers, setFilteredUsers] = useState<any[]>([])
   const [searchQuery, setSearchQuery] = useState("")
@@ -37,17 +39,32 @@ export default function UsersPage() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [editUserData, setEditUserData] = useState<any>({})
 
+  // Check if the user is an Admin and redirect if not
   useEffect(() => {
-    fetchUsers()
-  }, [])
+    if (isAuthLoading) return // Wait for auth to load
 
+    if (!isAuthenticated || !user) {
+      router.push("/login")
+      return
+    }
+
+    if (user.activeRole !== "Admin") {
+      router.push("/dashboard")
+      return
+    }
+
+    // If the user is an Admin, fetch users
+    fetchUsers()
+  }, [isAuthLoading, isAuthenticated, user, router])
+
+  // Search functionality
   useEffect(() => {
     if (searchQuery) {
       const filtered = users.filter(
         (user) =>
           user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
           user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          user.role.toLowerCase().includes(searchQuery.toLowerCase()),
+          user.activeRole.toLowerCase().includes(searchQuery.toLowerCase()),
       )
       setFilteredUsers(filtered)
     } else {
@@ -58,13 +75,22 @@ export default function UsersPage() {
   const fetchUsers = async () => {
     setIsLoading(true)
     try {
-      const response = await getAllUsers()
-      if (response.success) {
-        setUsers(response.users)
-        setFilteredUsers(response.users)
+      const response = await fetch("/api/user", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+      const data = await response.json()
+      if (data.success) {
+        setUsers(data.users)
+        setFilteredUsers(data.users)
+      } else {
+        console.error("Error fetching users:", data.error)
+        router.push("/dashboard") // Redirect if fetch fails (e.g., non-Admin access)
       }
     } catch (error) {
       console.error("Error fetching users:", error)
+      router.push("/dashboard")
     } finally {
       setIsLoading(false)
     }
@@ -103,7 +129,7 @@ export default function UsersPage() {
       _id: user._id,
       name: user.name,
       email: user.email,
-      role: user.role,
+      role: user.activeRole,
       status: user.status,
     })
     setIsEditDialogOpen(true)
@@ -115,7 +141,9 @@ export default function UsersPage() {
     try {
       const response = await updateUser(editUserData._id, editUserData)
       if (response.success) {
-        const updatedUsers = users.map((user) => (user._id === editUserData._id ? { ...user, ...editUserData } : user))
+        const updatedUsers = users.map((user) =>
+          user._id === editUserData._id ? { ...user, ...editUserData, activeRole: editUserData.role } : user
+        )
         setUsers(updatedUsers)
         setIsEditDialogOpen(false)
       }
@@ -135,6 +163,16 @@ export default function UsersPage() {
       default:
         return <Badge variant="outline">{status}</Badge>
     }
+  }
+
+  // Show loading state while checking authentication
+  if (isAuthLoading || !user) {
+    return <div>Loading...</div>
+  }
+
+  // This should already be handled by the useEffect redirect, but adding for clarity
+  if (!isAuthenticated || user.activeRole !== "Admin") {
+    return null
   }
 
   return (
@@ -205,9 +243,9 @@ export default function UsersPage() {
                     <TableCell className="font-medium">{user.name}</TableCell>
                     <TableCell>{user.email}</TableCell>
                     <TableCell>
-                      {user.role === "Issuer" ? (
+                      {user.activeRole === "Issuer" ? (
                         <Badge className="bg-blue-500">Issuer</Badge>
-                      ) : user.role === "Admin" ? (
+                      ) : user.activeRole === "Admin" ? (
                         <Badge className="bg-purple-500">Admin</Badge>
                       ) : (
                         <Badge variant="outline">User</Badge>

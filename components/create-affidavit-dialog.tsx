@@ -17,74 +17,178 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Check, ChevronsUpDown, X, Plus, User, Users } from "lucide-react"
+import { Check, ChevronsUpDown, X, Plus, User, Users, Wallet } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { createAffidavitRequest } from "@/lib/api/affidavits"
 import { toast } from "@/components/ui/use-toast"
+import { useAuth } from "@/lib/auth-context"
 
 interface CreateAffidavitDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
 }
 
-// Mock data for categories
+interface User {
+  _id: string
+  name: string
+  email: string
+  roles: string[]
+  idCardNumber?: string
+  area?: string
+  walletAddress?: string
+}
+
 const categories = [
-  { id: "property", name: "Property" },
-  { id: "vehicle", name: "Vehicle" },
-  { id: "business", name: "Business" },
-  { id: "personal", name: "Personal" },
-  { id: "education", name: "Education" },
-  { id: "employment", name: "Employment" },
-  { id: "legal", name: "Legal" },
-  { id: "financial", name: "Financial" },
-]
-
-// Mock data for issuers
-const issuers = [
-  { id: "issuer_1", name: "John Doe", organization: "Doe Legal Services" },
-  { id: "issuer_2", name: "Jane Smith", organization: "Smith Legal Consultants" },
-  { id: "issuer_3", name: "Robert Johnson", organization: "Johnson Notary Office" },
-  { id: "issuer_4", name: "Sarah Williams", organization: "Williams Legal" },
-  { id: "issuer_5", name: "Michael Brown", organization: "Brown & Associates" },
-]
-
-// Mock data for contacts (potential parties and witnesses)
-const contacts = [
-  { id: "contact_1", name: "Alice Johnson", email: "alice@example.com", relationship: "Friend" },
-  { id: "contact_2", name: "Bob Smith", email: "bob@example.com", relationship: "Colleague" },
-  { id: "contact_3", name: "Charlie Brown", email: "charlie@example.com", relationship: "Family" },
-  { id: "contact_4", name: "Diana Prince", email: "diana@example.com", relationship: "Business Partner" },
-  { id: "contact_5", name: "Edward Norton", email: "edward@example.com", relationship: "Neighbor" },
-  { id: "contact_6", name: "Fiona Apple", email: "fiona@example.com", relationship: "Friend" },
-  { id: "contact_7", name: "George Lucas", email: "george@example.com", relationship: "Colleague" },
-  { id: "contact_8", name: "Hannah Montana", email: "hannah@example.com", relationship: "Family" },
+  { id: "property", name: "Property", stampValue: "500" },
+  { id: "vehicle", name: "Vehicle", stampValue: "300" },
+  { id: "business", name: "Business", stampValue: "400" },
+  { id: "personal", name: "Personal", stampValue: "200" },
+  { id: "education", name: "Education", stampValue: "150" },
+  { id: "employment", name: "Employment", stampValue: "250" },
+  { id: "legal", name: "Legal", stampValue: "350" },
+  { id: "financial", name: "Financial", stampValue: "450" },
 ]
 
 export default function CreateAffidavitDialog({ open, onOpenChange }: CreateAffidavitDialogProps) {
   const router = useRouter()
+  const { token, user } = useAuth()
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [hasWallet, setHasWallet] = useState<boolean | null>(null)
 
   // Form state
   const [title, setTitle] = useState("")
   const [category, setCategory] = useState("")
+  const [stampValue, setStampValue] = useState("")
   const [issuerId, setIssuerId] = useState("")
   const [description, setDescription] = useState("")
   const [declaration, setDeclaration] = useState("")
 
+  // User role state (Seller/Buyer)
+  const [userRole, setUserRole] = useState("")
+  const [sellerId, setSellerId] = useState("")
+  const [buyerId, setBuyerId] = useState("")
+
   // Parties and witnesses state
-  const [parties, setParties] = useState<Array<{ role: string; contactId: string; name: string }>>([])
   const [witnesses, setWitnesses] = useState<Array<{ contactId: string; name: string }>>([])
 
-  // Temporary state for adding a party
-  const [partyRole, setPartyRole] = useState("")
-  const [partyContactId, setPartyContactId] = useState("")
-  const [partyContactOpen, setPartyContactOpen] = useState(false)
+  // Data fetching state
+  const [issuers, setIssuers] = useState<User[]>([])
+  const [users, setUsers] = useState<User[]>([])
+  const [isLoadingData, setIsLoadingData] = useState(true)
+
+  // Temporary state for selecting issuer
+  const [issuerOpen, setIssuerOpen] = useState(false)
+
+  // Temporary state for selecting seller/buyer
+  const [sellerOpen, setSellerOpen] = useState(false)
+  const [buyerOpen, setBuyerOpen] = useState(false)
 
   // Temporary state for adding a witness
   const [witnessContactId, setWitnessContactId] = useState("")
   const [witnessContactOpen, setWitnessContactOpen] = useState(false)
+
+  // Fetch issuers, users, and check wallet on component mount
+  useEffect(() => {
+    if (open) {
+      fetchData()
+      checkWallet()
+    }
+  }, [open, token])
+
+  const fetchData = async () => {
+    setIsLoadingData(true)
+    try {
+      const response = await fetch("/api/user", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      const data = await response.json()
+      if (data.success) {
+        const fetchedIssuers = data.users.filter((user: User) =>
+          user.roles.includes("Issuer")
+        )
+        const fetchedUsers = data.users.filter((user: User) =>
+          user.roles.includes("User")
+        )
+        setIssuers(fetchedIssuers)
+        setUsers(fetchedUsers)
+      } else {
+        toast({
+          title: "Error",
+          description: data.error || "Failed to fetch users",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error("Error fetching users:", error)
+      toast({
+        title: "Error",
+        description: "An unexpected error occurred while fetching users",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoadingData(false)
+    }
+  }
+
+  const checkWallet = async () => {
+    try {
+      if (user && user.walletAddress) {
+        setHasWallet(true)
+        return
+      }
+
+      const userResponse = await fetch("/api/user", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+      if (!userResponse.ok) {
+        throw new Error(`HTTP error! status: ${userResponse.status}`)
+      }
+      const userData = await userResponse.json()
+      if (userData.success) {
+        const currentUser = userData.users.find((u: User) => u._id === user?._id)
+        if (currentUser) {
+          setHasWallet(!!currentUser?.walletAddress)
+          console.log("Current user wallet address:", currentUser?.walletAddress)
+        } else {
+          setHasWallet(false)
+          toast({
+            title: "Error",
+            description: "Current user not found",
+            variant: "destructive",
+          })
+        }
+      } else {
+        setHasWallet(false)
+        toast({
+          title: "Error",
+          description: userData.error || "Failed to fetch user data",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error("Error verifying wallet:", error)
+      setHasWallet(false)
+      toast({
+        title: "Error",
+        description: "An error occurred while verifying wallet status",
+        variant: "destructive",
+      })
+    }
+  }
+
+  // Update stamp value when category changes
+  useEffect(() => {
+    const selectedCategory = categories.find((cat) => cat.id === category)
+    setStampValue(selectedCategory ? selectedCategory.stampValue : "")
+  }, [category])
 
   // Reset form when dialog opens/closes
   useEffect(() => {
@@ -96,41 +200,30 @@ export default function CreateAffidavitDialog({ open, onOpenChange }: CreateAffi
   const resetForm = () => {
     setTitle("")
     setCategory("")
+    setStampValue("")
     setIssuerId("")
     setDescription("")
     setDeclaration("")
-    setParties([])
+    setUserRole("")
+    setSellerId("")
+    setBuyerId("")
     setWitnesses([])
-    setPartyRole("")
-    setPartyContactId("")
     setWitnessContactId("")
-  }
-
-  const handleAddParty = () => {
-    if (partyRole && partyContactId) {
-      const contact = contacts.find((c) => c.id === partyContactId)
-      if (contact) {
-        setParties([...parties, { role: partyRole, contactId: partyContactId, name: contact.name }])
-        setPartyRole("")
-        setPartyContactId("")
-      }
-    }
-  }
-
-  const handleRemoveParty = (index: number) => {
-    const updatedParties = [...parties]
-    updatedParties.splice(index, 1)
-    setParties(updatedParties)
   }
 
   const handleAddWitness = () => {
     if (witnessContactId) {
-      const contact = contacts.find((c) => c.id === witnessContactId)
+      const contact = users.find((c) => c._id === witnessContactId)
       if (contact) {
-        // Check if witness is already added
         if (!witnesses.some((w) => w.contactId === witnessContactId)) {
           setWitnesses([...witnesses, { contactId: witnessContactId, name: contact.name }])
           setWitnessContactId("")
+        } else {
+          toast({
+            title: "Duplicate Witness",
+            description: "This contact has already been added as a witness.",
+            variant: "destructive",
+          })
         }
       }
     }
@@ -142,63 +235,94 @@ export default function CreateAffidavitDialog({ open, onOpenChange }: CreateAffi
     setWitnesses(updatedWitnesses)
   }
 
-  const handleSubmit = async () => {
-    // Validation
-    if (!title || !category || !issuerId || !description || !declaration || parties.length === 0) {
+  const handleSubmit = () => {
+    if (!title || !category || !issuerId || !userRole || !description || !declaration) {
       toast({
         title: "Validation Error",
-        description: "Please fill in all required fields (*). At least one party is required.",
+        description: "Please fill in all required fields (*).",
+        variant: "destructive",
+      })
+      return
+    }
+    if (userRole === "Buyer" && !sellerId) {
+      toast({
+        title: "Validation Error",
+        description: "Please select a Seller.",
+        variant: "destructive",
+      })
+      return
+    }
+    if (userRole === "Seller" && !buyerId) {
+      toast({
+        title: "Validation Error",
+        description: "Please select a Buyer.",
         variant: "destructive",
       })
       return
     }
 
-    setIsSubmitting(true)
+    toast({
+      title: "Success",
+      description: "Affidavit request submitted successfully (front-end demo).",
+    })
+    onOpenChange(false)
+  }
 
-    try {
-      // Format data for API
-      const affidavitData = {
-        title,
-        category,
-        issuerId,
-        description,
-        declaration,
-        parties: parties.map((p) => ({ role: p.role, userId: p.contactId })),
-        witnesses: witnesses.map((w) => ({ userId: w.contactId })),
-        userId: "user_123456789", // In a real app, this would be the current user's ID
-      }
+  // Filter out the current user from the list of selectable users for Seller/Buyer
+  const availableUsers = users.filter((u) => u._id !== user?._id)
 
-      const response = await createAffidavitRequest(affidavitData)
+  // Determine if the user selected themselves as the seller
+  const isUserSeller = userRole === "Seller"
 
-      if (response.success) {
-        toast({
-          title: "Success",
-          description: "Affidavit request created successfully.",
-        })
-        onOpenChange(false)
-        router.push("/dashboard") // Adjusted redirect to /dashboard since /dashboard/affidavits may not exist
-      } else {
-        toast({
-          title: "Error",
-          description: "Failed to create affidavit request: " + response.error,
-          variant: "destructive",
-        })
-      }
-    } catch (error) {
-      console.error("Error creating affidavit request:", error)
-      toast({
-        title: "Error",
-        description: "An unexpected error occurred while creating the affidavit request.",
-        variant: "destructive",
-      })
-    } finally {
-      setIsSubmitting(false)
-    }
+  // If wallet check is still loading or data is loading, show a loading state
+  if (hasWallet === null || isLoadingData) {
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-[600px] max-h-[90vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Request New Affidavit</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 flex items-center justify-center">
+            <p>Loading...</p>
+          </div>
+        </DialogContent>
+      </Dialog>
+    )
+  }
+
+  // If user doesn't have a connected wallet, show a message
+  if (!hasWallet) {
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-[600px] max-h-[90vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Request New Affidavit</DialogTitle>
+            <DialogDescription>
+              You need to connect a wallet to request an affidavit.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 flex flex-col items-center justify-center space-y-4">
+            <Wallet className="h-12 w-12 text-gray-500" />
+            <p className="text-center text-gray-600">
+              Please connect wallet before proceeding or you have to connect wallet to request for affidavit.
+            </p>
+            <Button onClick={() => router.push("/dashboard/settings")}>
+              Connect Wallet
+            </Button>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => onOpenChange(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    )
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-hidden flex flex-col">
+      <DialogContent className="sm:max-w-[600px] max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Request New Affidavit</DialogTitle>
           <DialogDescription>
@@ -206,7 +330,7 @@ export default function CreateAffidavitDialog({ open, onOpenChange }: CreateAffi
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 pr-4">
+        <ScrollArea className="flex-1 pr-4 overflow-y-auto scrollbar-custom">
           <div className="space-y-6 py-4">
             {/* Basic Information */}
             <div className="space-y-4">
@@ -236,120 +360,180 @@ export default function CreateAffidavitDialog({ open, onOpenChange }: CreateAffi
                 </Select>
               </div>
 
+              {category && (
+                <div className="space-y-2">
+                  <Label htmlFor="stampValue">Stamp Value (INR)</Label>
+                  <Input
+                    id="stampValue"
+                    value={stampValue}
+                    disabled
+                    className="bg-gray-100 dark:bg-gray-800"
+                  />
+                </div>
+              )}
+
               <div className="space-y-2">
                 <Label htmlFor="issuer">Issuer *</Label>
-                <Select value={issuerId} onValueChange={setIssuerId}>
-                  <SelectTrigger id="issuer">
-                    <SelectValue placeholder="Select an issuer" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {issuers.map((issuer) => (
-                      <SelectItem key={issuer.id} value={issuer.id}>
-                        {issuer.name} - {issuer.organization}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Popover open={issuerOpen} onOpenChange={setIssuerOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={issuerOpen}
+                      className="w-full justify-between"
+                    >
+                      {issuerId
+                        ? issuers.find((issuer) => issuer._id === issuerId)?.name
+                        : "Select issuer..."}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-full p-0">
+                    <Command>
+                      <CommandInput placeholder="Search by name or ID card number..." />
+                      <CommandList>
+                        <CommandEmpty>No issuer found.</CommandEmpty>
+                        <CommandGroup>
+                          {issuers.map((issuer) => (
+                            <CommandItem
+                              key={issuer._id}
+                              value={`${issuer.name}-${issuer.idCardNumber}`}
+                              onSelect={() => {
+                                setIssuerId(issuer._id)
+                                setIssuerOpen(false)
+                              }}
+                            >
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  issuerId === issuer._id ? "opacity-100" : "opacity-0",
+                                )}
+                              />
+                              {issuer.name} - {issuer.area || "N/A"} - {issuer.idCardNumber || "N/A"}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
             </div>
 
-            {/* Parties */}
+            {/* User Role (Seller/Buyer) */}
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <Label>Parties *</Label>
-                <span className="text-xs text-gray-500 dark:text-gray-400">At least one party is required</span>
+              <div className="space-y-2">
+                <Label htmlFor="userRole">Your Role *</Label>
+                <Select value={userRole} onValueChange={setUserRole}>
+                  <SelectTrigger id="userRole">
+                    <SelectValue placeholder="Select your role" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Seller">Seller</SelectItem>
+                    <SelectItem value="Buyer">Buyer</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
-              <div className="space-y-4">
-                {parties.length > 0 && (
-                  <div className="space-y-2">
-                    {parties.map((party, index) => (
-                      <div
-                        key={index}
-                        className="flex items-center justify-between bg-gray-50 dark:bg-gray-800 p-2 rounded-md"
+              {/* Show "Select Seller" if user is Buyer */}
+              {userRole === "Buyer" && (
+                <div className="space-y-2">
+                  <Label htmlFor="seller">Select Seller *</Label>
+                  <Popover open={sellerOpen} onOpenChange={setSellerOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={sellerOpen}
+                        className="w-full justify-between"
                       >
-                        <div className="flex items-center gap-2">
-                          <User className="h-4 w-4 text-gray-500" />
-                          <span className="font-medium">{party.name}</span>
-                          <Badge variant="outline">{party.role}</Badge>
-                        </div>
-                        <Button variant="ghost" size="icon" onClick={() => handleRemoveParty(index)}>
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                <div className="flex items-end gap-2">
-                  <div className="flex-1 space-y-2">
-                    <Label htmlFor="partyRole">Role</Label>
-                    <Input
-                      id="partyRole"
-                      placeholder="e.g., Buyer, Seller, Applicant"
-                      value={partyRole}
-                      onChange={(e) => setPartyRole(e.target.value)}
-                    />
-                  </div>
-
-                  <div className="flex-1 space-y-2">
-                    <Label htmlFor="partyContact">Contact</Label>
-                    <Popover open={partyContactOpen} onOpenChange={setPartyContactOpen}>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          role="combobox"
-                          aria-expanded={partyContactOpen}
-                          className="w-full justify-between"
-                        >
-                          {partyContactId
-                            ? contacts.find((contact) => contact.id === partyContactId)?.name
-                            : "Select contact..."}
-                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-full p-0">
-                        <Command>
-                          <CommandInput placeholder="Search contacts..." />
-                          <CommandList>
-                            <CommandEmpty>No contact found.</CommandEmpty>
-                            <CommandGroup>
-                              {contacts.map((contact) => (
-                                <CommandItem
-                                  key={contact.id}
-                                  value={contact.id}
-                                  onSelect={(value) => {
-                                    setPartyContactId(value === partyContactId ? "" : value)
-                                    setPartyContactOpen(false)
-                                  }}
-                                >
-                                  <Check
-                                    className={cn(
-                                      "mr-2 h-4 w-4",
-                                      partyContactId === contact.id ? "opacity-100" : "opacity-0",
-                                    )}
-                                  />
-                                  {contact.name} - {contact.relationship}
-                                </CommandItem>
-                              ))}
-                            </CommandGroup>
-                          </CommandList>
-                        </Command>
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    onClick={handleAddParty}
-                    disabled={!partyRole || !partyContactId}
-                  >
-                    <Plus className="h-4 w-4" />
-                  </Button>
+                        {sellerId
+                          ? availableUsers.find((user) => user._id === sellerId)?.name
+                          : "Select seller..."}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-full p-0">
+                      <Command>
+                        <CommandInput placeholder="Search by name or ID card number..." />
+                        <CommandList>
+                          <CommandEmpty>No user found.</CommandEmpty>
+                          <CommandGroup>
+                            {availableUsers.map((user) => (
+                              <CommandItem
+                                key={user._id}
+                                value={`${user.name}-${user.idCardNumber}`}
+                                onSelect={() => {
+                                  setSellerId(user._id)
+                                  setSellerOpen(false)
+                                }}
+                              >
+                                <Check
+                                  className={cn(
+                                    "mr-2 h-4 w-4",
+                                    sellerId === user._id ? "opacity-100" : "opacity-0",
+                                  )}
+                                />
+                                {user.name} - {user.area || "N/A"} - {user.idCardNumber || "N/A"}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
                 </div>
-              </div>
+              )}
+
+              {/* Show "Select Buyer" if user is Seller */}
+              {isUserSeller && (
+                <div className="space-y-2">
+                  <Label htmlFor="buyer">Select Buyer *</Label>
+                  <Popover open={buyerOpen} onOpenChange={setBuyerOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={buyerOpen}
+                        className="w-full justify-between"
+                      >
+                        {buyerId
+                          ? availableUsers.find((user) => user._id === buyerId)?.name
+                          : "Select buyer..."}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-full p-0">
+                      <Command>
+                        <CommandInput placeholder="Search by name or ID card number..." />
+                        <CommandList>
+                          <CommandEmpty>No user found.</CommandEmpty>
+                          <CommandGroup>
+                            {availableUsers.map((user) => (
+                              <CommandItem
+                                key={user._id}
+                                value={`${user.name}-${user.idCardNumber}`}
+                                onSelect={() => {
+                                  setBuyerId(user._id)
+                                  setBuyerOpen(false)
+                                }}
+                              >
+                                <Check
+                                  className={cn(
+                                    "mr-2 h-4 w-4",
+                                    buyerId === user._id ? "opacity-100" : "opacity-0",
+                                  )}
+                                />
+                                {user.name} - {user.area || "N/A"} - {user.idCardNumber || "N/A"}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              )}
             </div>
 
             {/* Witnesses */}
@@ -358,7 +542,7 @@ export default function CreateAffidavitDialog({ open, onOpenChange }: CreateAffi
 
               <div className="space-y-4">
                 {witnesses.length > 0 && (
-                  <div className="space-y-2">
+                  <div className="space-y-2 max-h-40 overflow-y-auto scrollbar-custom">
                     {witnesses.map((witness, index) => (
                       <div
                         key={index}
@@ -389,33 +573,33 @@ export default function CreateAffidavitDialog({ open, onOpenChange }: CreateAffi
                           className="w-full justify-between"
                         >
                           {witnessContactId
-                            ? contacts.find((contact) => contact.id === witnessContactId)?.name
+                            ? users.find((user) => user._id === witnessContactId)?.name
                             : "Select contact..."}
                           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                         </Button>
                       </PopoverTrigger>
                       <PopoverContent className="w-full p-0">
                         <Command>
-                          <CommandInput placeholder="Search contacts..." />
+                          <CommandInput placeholder="Search by name or ID card number..." />
                           <CommandList>
                             <CommandEmpty>No contact found.</CommandEmpty>
                             <CommandGroup>
-                              {contacts.map((contact) => (
+                              {users.map((user) => (
                                 <CommandItem
-                                  key={contact.id}
-                                  value={contact.id}
-                                  onSelect={(value) => {
-                                    setWitnessContactId(value === witnessContactId ? "" : value)
+                                  key={user._id}
+                                  value={`${user.name}-${user.idCardNumber}`}
+                                  onSelect={() => {
+                                    setWitnessContactId(user._id)
                                     setWitnessContactOpen(false)
                                   }}
                                 >
                                   <Check
                                     className={cn(
                                       "mr-2 h-4 w-4",
-                                      witnessContactId === contact.id ? "opacity-100" : "opacity-0",
+                                      witnessContactId === user._id ? "opacity-100" : "opacity-0",
                                     )}
                                   />
-                                  {contact.name} - {contact.relationship}
+                                  {user.name} - {user.area || "N/A"} - {user.idCardNumber || "N/A"}
                                 </CommandItem>
                               ))}
                             </CommandGroup>
