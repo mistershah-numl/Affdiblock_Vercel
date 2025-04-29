@@ -27,7 +27,7 @@ export default function Home() {
                   </Button>
                 </Link>
                 <Link href="/verify">
-                  <Button size="lg" variant="outline" className="border-white text-white hover:bg-white/10">
+                  <Button size="lg" variant="outline" className="bg-purple border-white text-white-600 hover:bg-gray-100">
                     Verify Document
                   </Button>
                 </Link>

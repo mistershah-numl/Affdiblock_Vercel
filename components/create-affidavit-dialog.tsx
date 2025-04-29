@@ -50,11 +50,30 @@ const categories = [
   { id: "financial", name: "Financial", stampValue: "450" },
 ]
 
+const categoryFields: Record<string, { label: string; name: string; type: string; required: boolean }[]> = {
+  vehicle: [
+    { label: "Car Make", name: "carMake", type: "text", required: true },
+    { label: "Model", name: "model", type: "text", required: true },
+    { label: "Year", name: "year", type: "number", required: true },
+    { label: "VIN", name: "vin", type: "text", required: true },
+    { label: "Registration Number", name: "registrationNumber", type: "text", required: true },
+  ],
+  property: [
+    { label: "Address", name: "address", type: "text", required: true },
+    { label: "Size (sqft)", name: "size", type: "number", required: true },
+    { label: "Property Type", name: "propertyType", type: "select", required: true },
+    { label: "Ownership Details", name: "ownershipDetails", type: "text", required: false },
+  ],
+}
+
+const propertyTypes = ["Residential", "Commercial", "Industrial"]
+
 export default function CreateAffidavitDialog({ open, onOpenChange }: CreateAffidavitDialogProps) {
   const router = useRouter()
   const { token, user } = useAuth()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [hasWallet, setHasWallet] = useState<boolean | null>(null)
+  const [initiatorIdCardNumber, setInitiatorIdCardNumber] = useState<string | null>(null)
 
   // Form state
   const [title, setTitle] = useState("")
@@ -68,6 +87,16 @@ export default function CreateAffidavitDialog({ open, onOpenChange }: CreateAffi
   const [userRole, setUserRole] = useState("")
   const [sellerId, setSellerId] = useState("")
   const [buyerId, setBuyerId] = useState("")
+  const [sellerHasWallet, setSellerHasWallet] = useState<boolean | null>(null)
+  const [buyerHasWallet, setBuyerHasWallet] = useState<boolean | null>(null)
+
+  // Dynamic fields state
+  const [details, setDetails] = useState<Record<string, string | number>>({})
+
+  // Document upload state
+  const [documents, setDocuments] = useState<File[]>([])
+  const MAX_FILE_SIZE = 2 * 1024 * 1024 // 2MB
+  const ALLOWED_FILE_TYPES = ["image/jpeg", "image/png", "application/pdf"]
 
   // Parties and witnesses state
   const [witnesses, setWitnesses] = useState<Array<{ contactId: string; name: string }>>([])
@@ -112,11 +141,16 @@ export default function CreateAffidavitDialog({ open, onOpenChange }: CreateAffi
         const fetchedIssuers = data.users.filter((user: User) =>
           user.roles.includes("Issuer")
         )
-        const fetchedUsers = data.users.filter((user: User) =>
-          user.roles.includes("User")
-        )
+        // Include all users (Admins, Issuers, etc.) for Seller/Buyer selection
+        const fetchedUsers = data.users
         setIssuers(fetchedIssuers)
         setUsers(fetchedUsers)
+
+        // Find the logged-in user to get their ID card number
+        const currentUser = data.users.find((u: User) => u._id === user?._id)
+        if (currentUser) {
+          setInitiatorIdCardNumber(currentUser.idCardNumber || null)
+        }
       } else {
         toast({
           title: "Error",
@@ -140,6 +174,7 @@ export default function CreateAffidavitDialog({ open, onOpenChange }: CreateAffi
     try {
       if (user && user.walletAddress) {
         setHasWallet(true)
+        setInitiatorIdCardNumber(user.idCardNumber || null)
         return
       }
 
@@ -156,6 +191,7 @@ export default function CreateAffidavitDialog({ open, onOpenChange }: CreateAffi
         const currentUser = userData.users.find((u: User) => u._id === user?._id)
         if (currentUser) {
           setHasWallet(!!currentUser?.walletAddress)
+          setInitiatorIdCardNumber(currentUser.idCardNumber || null)
           console.log("Current user wallet address:", currentUser?.walletAddress)
         } else {
           setHasWallet(false)
@@ -184,10 +220,31 @@ export default function CreateAffidavitDialog({ open, onOpenChange }: CreateAffi
     }
   }
 
-  // Update stamp value when category changes
+  // Check wallet status for Seller
+  useEffect(() => {
+    if (sellerId) {
+      const selectedSeller = users.find((u) => u._id === sellerId)
+      setSellerHasWallet(!!selectedSeller?.walletAddress)
+    } else {
+      setSellerHasWallet(null)
+    }
+  }, [sellerId, users])
+
+  // Check wallet status for Buyer
+  useEffect(() => {
+    if (buyerId) {
+      const selectedBuyer = users.find((u) => u._id === buyerId)
+      setBuyerHasWallet(!!selectedBuyer?.walletAddress)
+    } else {
+      setBuyerHasWallet(null)
+    }
+  }, [buyerId, users])
+
+  // Update stamp value and reset dynamic fields when category changes
   useEffect(() => {
     const selectedCategory = categories.find((cat) => cat.id === category)
     setStampValue(selectedCategory ? selectedCategory.stampValue : "")
+    setDetails({}) // Reset dynamic fields when category changes
   }, [category])
 
   // Reset form when dialog opens/closes
@@ -207,6 +264,10 @@ export default function CreateAffidavitDialog({ open, onOpenChange }: CreateAffi
     setUserRole("")
     setSellerId("")
     setBuyerId("")
+    setSellerHasWallet(null)
+    setBuyerHasWallet(null)
+    setDetails({})
+    setDocuments([])
     setWitnesses([])
     setWitnessContactId("")
   }
@@ -235,7 +296,47 @@ export default function CreateAffidavitDialog({ open, onOpenChange }: CreateAffi
     setWitnesses(updatedWitnesses)
   }
 
-  const handleSubmit = () => {
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || [])
+    const validFiles: File[] = []
+
+    files.forEach((file) => {
+      if (!ALLOWED_FILE_TYPES.includes(file.type)) {
+        toast({
+          title: "Invalid File Type",
+          description: "Only PDF, JPEG, and PNG files are allowed.",
+          variant: "destructive",
+        })
+        return
+      }
+
+      if (file.size > MAX_FILE_SIZE) {
+        toast({
+          title: "File Too Large",
+          description: "Each file must be less than 2MB.",
+          variant: "destructive",
+        })
+        return
+      }
+
+      validFiles.push(file)
+    })
+
+    setDocuments([...documents, ...validFiles])
+  }
+
+  const handleRemoveDocument = (index: number) => {
+    const updatedDocuments = [...documents]
+    updatedDocuments.splice(index, 1)
+    setDocuments(updatedDocuments)
+  }
+
+  const handleDetailChange = (name: string, value: string | number) => {
+    setDetails((prev) => ({ ...prev, [name]: value }))
+  }
+
+  const handleSubmit = async () => {
+    // Validation
     if (!title || !category || !issuerId || !userRole || !description || !declaration) {
       toast({
         title: "Validation Error",
@@ -261,11 +362,96 @@ export default function CreateAffidavitDialog({ open, onOpenChange }: CreateAffi
       return
     }
 
-    toast({
-      title: "Success",
-      description: "Affidavit request submitted successfully (front-end demo).",
-    })
-    onOpenChange(false)
+    // Validate dynamic fields
+    const currentFields = categoryFields[category] || []
+    for (const field of currentFields) {
+      if (field.required && !details[field.name]) {
+        toast({
+          title: "Validation Error",
+          description: `Please fill in the required field: ${field.label}`,
+          variant: "destructive",
+        })
+        return
+      }
+    }
+
+    // Check if Seller/Buyer have connected wallets
+    if (userRole === "Buyer" && sellerHasWallet === false) {
+      toast({
+        title: "Validation Error",
+        description: "The selected Seller does not have a connected wallet.",
+        variant: "destructive",
+      })
+      return
+    }
+    if (userRole === "Seller" && buyerHasWallet === false) {
+      toast({
+        title: "Validation Error",
+        description: "The selected Buyer does not have a connected wallet.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setIsSubmitting(true)
+
+    try {
+      const formData = new FormData()
+      formData.append("title", title)
+      formData.append("category", category)
+      formData.append("stampValue", stampValue)
+      formData.append("issuerId", issuerId)
+      formData.append("description", description)
+      formData.append("declaration", declaration)
+      formData.append("userRole", userRole)
+      if (sellerId) formData.append("sellerId", sellerId)
+      if (buyerId) formData.append("buyerId", buyerId)
+      formData.append("witnesses", JSON.stringify(witnesses))
+      formData.append("details", JSON.stringify(details))
+      formData.append("createdBy", user?._id || "")
+      formData.append("initiatorIdCardNumber", initiatorIdCardNumber || "")
+
+      documents.forEach((file) => {
+        formData.append("documents", file)
+      })
+
+      const response = await fetch("/api/affidavits/affidavit-requests/create", {
+        method: "POST",
+        body: formData,
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const result = await response.json()
+      if (result.success) {
+        const issuerName = issuers.find((issuer) => issuer._id === issuerId)?.name || "the issuer"
+        toast({
+          title: "Success",
+          description: `Affidavit request successfully sent to issuer ${issuerName}.`,
+        })
+        onOpenChange(false)
+      } else {
+        toast({
+          title: "Error",
+          description: result.error || "Failed to submit affidavit request.",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error("Error submitting affidavit:", error)
+      toast({
+        title: "Error",
+        description: "An unexpected error occurred while submitting the affidavit.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   // Filter out the current user from the list of selectable users for Seller/Buyer
@@ -420,6 +606,51 @@ export default function CreateAffidavitDialog({ open, onOpenChange }: CreateAffi
               </div>
             </div>
 
+            {/* Dynamic Fields Based on Category */}
+            {category && categoryFields[category] && (
+              <div className="space-y-4">
+                <Label>{category.charAt(0).toUpperCase() + category.slice(1)} Details</Label>
+                {categoryFields[category].map((field) => (
+                  <div key={field.name} className="space-y-2">
+                    <Label htmlFor={field.name}>
+                      {field.label} {field.required ? "*" : ""}
+                    </Label>
+                    {field.type === "select" ? (
+                      <Select
+                        value={details[field.name]?.toString() || ""}
+                        onValueChange={(value) => handleDetailChange(field.name, value)}
+                      >
+                        <SelectTrigger id={field.name}>
+                          <SelectValue placeholder={`Select ${field.label}`} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {field.name === "propertyType" &&
+                            propertyTypes.map((type) => (
+                              <SelectItem key={type} value={type}>
+                                {type}
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Input
+                        id={field.name}
+                        type={field.type}
+                        placeholder={`Enter ${field.label}`}
+                        value={details[field.name] || ""}
+                        onChange={(e) =>
+                          handleDetailChange(
+                            field.name,
+                            field.type === "number" ? Number(e.target.value) : e.target.value
+                          )
+                        }
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
             {/* User Role (Seller/Buyer) */}
             <div className="space-y-4">
               <div className="space-y-2">
@@ -482,6 +713,9 @@ export default function CreateAffidavitDialog({ open, onOpenChange }: CreateAffi
                       </Command>
                     </PopoverContent>
                   </Popover>
+                  {sellerId && sellerHasWallet === false && (
+                    <p className="text-red-500 text-sm">Seller has not connected a wallet yet.</p>
+                  )}
                 </div>
               )}
 
@@ -532,6 +766,9 @@ export default function CreateAffidavitDialog({ open, onOpenChange }: CreateAffi
                       </Command>
                     </PopoverContent>
                   </Popover>
+                  {buyerId && buyerHasWallet === false && (
+                    <p className="text-red-500 text-sm">Buyer has not connected a wallet yet.</p>
+                  )}
                 </div>
               )}
             </div>
@@ -620,6 +857,44 @@ export default function CreateAffidavitDialog({ open, onOpenChange }: CreateAffi
                   </Button>
                 </div>
               </div>
+            </div>
+
+            {/* Document Upload */}
+            <div className="space-y-4">
+              <Label>Documents (Optional)</Label>
+              <div className="space-y-2">
+                <Input
+                  type="file"
+                  accept="image/jpeg,image/png,application/pdf"
+                  multiple
+                  onChange={handleFileChange}
+                />
+                <p className="text-sm text-gray-500">
+                  Upload PDF, JPEG, or PNG files (max 2MB each)
+                </p>
+              </div>
+              {documents.length > 0 && (
+                <div className="space-y-2 max-h-40 overflow-y-auto scrollbar-custom">
+                  {documents.map((file, index) => (
+                    <div
+                      key={index}
+                      className="flex items-center justify-between bg-gray-50 dark:bg-gray-800 p-2 rounded-md"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{file.name}</span>
+                        <Badge variant="outline">{file.type}</Badge>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleRemoveDocument(index)}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Description and Declaration */}

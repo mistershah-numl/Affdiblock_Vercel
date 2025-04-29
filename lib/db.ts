@@ -6,17 +6,29 @@ if (!MONGODB_URI) {
   throw new Error("Please define the MONGODB_URI environment variable")
 }
 
-/**
- * Global cache to maintain a single MongoDB connection across hot reloads in development.
- * Prevents exponential connection growth during API route usage.
- */
-let cached = global.mongoose
-
-if (!cached) {
-  cached = global.mongoose = { conn: null, promise: null }
+// Define the shape of the cached connection
+interface MongooseCache {
+  conn: mongoose.Mongoose | null
+  promise: Promise<mongoose.Mongoose> | null
 }
 
-async function dbConnect() {
+// Extend the global object to include mongoose
+declare global {
+  namespace NodeJS {
+    interface Global {
+      mongoose: MongooseCache
+    }
+  }
+}
+
+// Initialize the cache
+let cached: MongooseCache = (global as any).mongoose || { conn: null, promise: null }
+
+if (!(global as any).mongoose) {
+  (global as any).mongoose = cached
+}
+
+async function dbConnect(): Promise<mongoose.Mongoose> {
   if (cached.conn) {
     console.log("Using cached MongoDB connection")
     return cached.conn
@@ -30,16 +42,12 @@ async function dbConnect() {
       socketTimeoutMS: 45000,
     }
 
-    console.log("Clearing Mongoose model cache before connecting")
-    mongoose.models = {};
-    mongoose.modelSchemas = {};
-
     console.log("Establishing new MongoDB connection")
     cached.promise = mongoose
       .connect(MONGODB_URI, opts)
-      .then((mongoose) => {
+      .then((mongooseInstance) => {
         console.log("MongoDB connected")
-        return mongoose
+        return mongooseInstance
       })
       .catch((error) => {
         console.error("MongoDB connection error:", error)
