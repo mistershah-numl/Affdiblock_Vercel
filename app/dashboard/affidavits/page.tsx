@@ -42,7 +42,8 @@ interface AffidavitRequest {
   _id: string
   title: string
   category: string
-  issuerId: { name: string }
+  issuerId: { name: string; area: string }
+  issuerAccepted: boolean // Added issuerAccepted field
   description: string
   declaration: string
   userRole: string
@@ -217,7 +218,7 @@ export default function AffidavitsPage() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "Active":
-      case "approved":
+      case "accepted":
         return <Badge className="bg-green-500">Active</Badge>
       case "Pending":
       case "pending":
@@ -310,12 +311,14 @@ export default function AffidavitsPage() {
     setIsViewRequestDialogOpen(true)
   }
 
-  const handleAcceptRequest = async () => {
+  const handleRespondRequest = async (action: "accept" | "reject") => {
     if (!selectedAffidavitRequest || !user?._id) return
 
     // Determine the user's role in this affidavit request
     let role = ""
-    if (selectedAffidavitRequest.sellerId && selectedAffidavitRequest.sellerId.name === user.name) {
+    if (selectedAffidavitRequest.issuerId.name === user.name) {
+      role = "issuer"
+    } else if (selectedAffidavitRequest.sellerId && selectedAffidavitRequest.sellerId.name === user.name) {
       role = "seller"
     } else if (selectedAffidavitRequest.buyerId && selectedAffidavitRequest.buyerId.name === user.name) {
       role = "buyer"
@@ -343,7 +346,7 @@ export default function AffidavitsPage() {
           requestId: selectedAffidavitRequest._id,
           userId: user._id,
           role,
-          action: "accept",
+          action,
         }),
       })
 
@@ -351,7 +354,7 @@ export default function AffidavitsPage() {
       if (result.success) {
         toast({
           title: "Success",
-          description: "You have successfully accepted the affidavit request.",
+          description: `You have successfully ${action}ed the affidavit request.`,
         })
         // Refresh the affidavit requests
         fetchAffidavitRequests()
@@ -359,22 +362,43 @@ export default function AffidavitsPage() {
       } else {
         toast({
           title: "Error",
-          description: result.error || "Failed to accept the affidavit request.",
+          description: result.error || `Failed to ${action} the affidavit request.`,
           variant: "destructive",
         })
       }
     } catch (error) {
-      console.error("Error accepting affidavit request:", error)
+      console.error(`Error ${action}ing affidavit request:`, error)
       toast({
         title: "Error",
-        description: "An unexpected error occurred while accepting the affidavit request.",
+        description: `An unexpected error occurred while ${action}ing the affidavit request.`,
         variant: "destructive",
       })
     }
   }
 
-  // Check if the user has already accepted the request
+  // Check if the user has already responded to the request
+  const hasUserResponded = (request: AffidavitRequest) => {
+    if (request.issuerId.name === user?.name) {
+      return request.issuerAccepted !== undefined && request.issuerAccepted !== null
+    }
+    if (request.sellerId && request.sellerId.name === user?.name) {
+      return request.sellerAccepted
+    }
+    if (request.buyerId && request.buyerId.name === user?.name) {
+      return request.buyerAccepted
+    }
+    const witness = request.witnesses.find((w) => w.contactId.name === user?.name)
+    if (witness) {
+      return witness.hasAccepted
+    }
+    return false
+  }
+
+  // Check if the user has accepted the request
   const hasUserAccepted = (request: AffidavitRequest) => {
+    if (request.issuerId.name === user?.name) {
+      return request.issuerAccepted
+    }
     if (request.sellerId && request.sellerId.name === user?.name) {
       return request.sellerAccepted
     }
@@ -568,7 +592,7 @@ export default function AffidavitsPage() {
                     <SelectContent>
                       <SelectItem value="all">All Statuses</SelectItem>
                       <SelectItem value="pending">Pending</SelectItem>
-                      <SelectItem value="approved">Approved</SelectItem>
+                      <SelectItem value="accepted">Accepted</SelectItem>
                       <SelectItem value="rejected">Rejected</SelectItem>
                     </SelectContent>
                   </Select>
@@ -682,7 +706,16 @@ export default function AffidavitsPage() {
               </div>
               <div>
                 <Label>Issuer</Label>
-                <p className="text-sm text-gray-500">{selectedAffidavitRequest.issuerId.name}</p>
+                <p className="text-sm text-gray-500">
+                  {selectedAffidavitRequest.issuerId.name} (Area: {selectedAffidavitRequest.issuerId.area || "N/A"})
+                  {selectedAffidavitRequest.issuerAccepted ? (
+                    <CheckCircle className="inline-block h-4 w-4 ml-2 text-green-500" />
+                  ) : selectedAffidavitRequest.issuerAccepted === false ? (
+                    <XCircle className="inline-block h-4 w-4 ml-2 text-red-500" />
+                  ) : (
+                    <span className="inline-block ml-2 text-orange-500">Pending</span>
+                  )}
+                </p>
               </div>
               <div>
                 <Label>Description</Label>
@@ -732,8 +765,10 @@ export default function AffidavitsPage() {
                       {witness.contactId.name} (ID Card: {witness.contactId.idCardNumber})
                       {witness.hasAccepted ? (
                         <CheckCircle className="inline-block h-4 w-4 ml-2 text-green-500" />
-                      ) : (
+                      ) : witness.hasAccepted === false ? (
                         <XCircle className="inline-block h-4 w-4 ml-2 text-red-500" />
+                      ) : (
+                        <span className="inline-block ml-2 text-orange-500">Pending</span>
                       )}
                     </p>
                   ))}
@@ -749,8 +784,13 @@ export default function AffidavitsPage() {
             <Button variant="outline" onClick={() => setIsViewRequestDialogOpen(false)}>
               Close
             </Button>
-            {selectedAffidavitRequest && !hasUserAccepted(selectedAffidavitRequest) && (
-              <Button onClick={handleAcceptRequest}>Accept</Button>
+            {selectedAffidavitRequest && !hasUserResponded(selectedAffidavitRequest) && (
+              <>
+                <Button onClick={() => handleRespondRequest("accept")}>Accept</Button>
+                <Button variant="destructive" onClick={() => handleRespondRequest("reject")}>
+                  Reject
+                </Button>
+              </>
             )}
           </DialogFooter>
         </DialogContent>

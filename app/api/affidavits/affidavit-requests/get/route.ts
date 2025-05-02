@@ -13,22 +13,25 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: "User ID is required" }, { status: 400 })
     }
 
-    // Fetch affidavit requests where the user is involved (as creator, seller, buyer, or witness)
+    // Fetch affidavit requests where the user is involved (as creator, seller, buyer, witness, or issuer)
     const affidavitRequests = await AffidavitRequest.find({
       $or: [
         { createdBy: userId },
         { sellerId: userId },
         { buyerId: userId },
         { "witnesses.contactId": userId },
+        { issuerId: userId },
       ],
     })
-      .populate("issuerId", "name")
-      .populate("sellerId", "name idCardNumber")
-      .populate("buyerId", "name idCardNumber")
-      .populate("createdBy", "name idCardNumber")
-      .populate("witnesses.contactId", "name idCardNumber")
+      .populate("issuerId", "_id name area")
+      .populate("sellerId", "_id name idCardNumber")
+      .populate("buyerId", "_id name idCardNumber")
+      .populate("createdBy", "_id name idCardNumber")
+      .populate("witnesses.contactId", "_id name idCardNumber")
 
-    // If no affidavit requests are found, return an empty array with success
+    // Log the fetched data for debugging
+    console.log("Populated affidavit requests:", affidavitRequests)
+
     return NextResponse.json({
       success: true,
       affidavitRequests: affidavitRequests || [],

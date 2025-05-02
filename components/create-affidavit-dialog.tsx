@@ -80,6 +80,7 @@ export default function CreateAffidavitDialog({ open, onOpenChange }: CreateAffi
   const [category, setCategory] = useState("")
   const [stampValue, setStampValue] = useState("")
   const [issuerId, setIssuerId] = useState("")
+  const [issuerHasWallet, setIssuerHasWallet] = useState<boolean | null>(null) // Added state for issuer wallet check
   const [description, setDescription] = useState("")
   const [declaration, setDeclaration] = useState("")
 
@@ -121,7 +122,6 @@ export default function CreateAffidavitDialog({ open, onOpenChange }: CreateAffi
   useEffect(() => {
     if (open) {
       fetchData()
-      checkWallet()
     }
   }, [open, token])
 
@@ -138,20 +138,26 @@ export default function CreateAffidavitDialog({ open, onOpenChange }: CreateAffi
       }
       const data = await response.json()
       if (data.success) {
-        const fetchedIssuers = data.users.filter((user: User) =>
-          user.roles.includes("Issuer")
-        )
-        // Include all users (Admins, Issuers, etc.) for Seller/Buyer selection
-        const fetchedUsers = data.users
-        setIssuers(fetchedIssuers)
-        setUsers(fetchedUsers)
+        setIssuers(data.issuers || [])
+        setUsers(data.users || [])
 
-        // Find the logged-in user to get their ID card number
-        const currentUser = data.users.find((u: User) => u._id === user?._id)
-        if (currentUser) {
-          setInitiatorIdCardNumber(currentUser.idCardNumber || null)
+        // Set the current user's wallet status and ID card number
+        if (data.currentUser) {
+          setHasWallet(!!data.currentUser.walletAddress)
+          setInitiatorIdCardNumber(data.currentUser.idCardNumber || null)
+          console.log("Current user wallet address:", data.currentUser.walletAddress)
+        } else {
+          setHasWallet(false)
+          toast({
+            title: "Error",
+            description: "Current user data not found",
+            variant: "destructive",
+          })
         }
       } else {
+        setIssuers([])
+        setUsers([])
+        setHasWallet(false)
         toast({
           title: "Error",
           description: data.error || "Failed to fetch users",
@@ -160,6 +166,9 @@ export default function CreateAffidavitDialog({ open, onOpenChange }: CreateAffi
       }
     } catch (error) {
       console.error("Error fetching users:", error)
+      setIssuers([])
+      setUsers([])
+      setHasWallet(false)
       toast({
         title: "Error",
         description: "An unexpected error occurred while fetching users",
@@ -170,55 +179,15 @@ export default function CreateAffidavitDialog({ open, onOpenChange }: CreateAffi
     }
   }
 
-  const checkWallet = async () => {
-    try {
-      if (user && user.walletAddress) {
-        setHasWallet(true)
-        setInitiatorIdCardNumber(user.idCardNumber || null)
-        return
-      }
-
-      const userResponse = await fetch("/api/user", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      })
-      if (!userResponse.ok) {
-        throw new Error(`HTTP error! status: ${userResponse.status}`)
-      }
-      const userData = await userResponse.json()
-      if (userData.success) {
-        const currentUser = userData.users.find((u: User) => u._id === user?._id)
-        if (currentUser) {
-          setHasWallet(!!currentUser?.walletAddress)
-          setInitiatorIdCardNumber(currentUser.idCardNumber || null)
-          console.log("Current user wallet address:", currentUser?.walletAddress)
-        } else {
-          setHasWallet(false)
-          toast({
-            title: "Error",
-            description: "Current user not found",
-            variant: "destructive",
-          })
-        }
-      } else {
-        setHasWallet(false)
-        toast({
-          title: "Error",
-          description: userData.error || "Failed to fetch user data",
-          variant: "destructive",
-        })
-      }
-    } catch (error) {
-      console.error("Error verifying wallet:", error)
-      setHasWallet(false)
-      toast({
-        title: "Error",
-        description: "An error occurred while verifying wallet status",
-        variant: "destructive",
-      })
+  // Check wallet status for Issuer
+  useEffect(() => {
+    if (issuerId) {
+      const selectedIssuer = issuers.find((u) => u._id === issuerId)
+      setIssuerHasWallet(!!selectedIssuer?.walletAddress)
+    } else {
+      setIssuerHasWallet(null)
     }
-  }
+  }, [issuerId, issuers])
 
   // Check wallet status for Seller
   useEffect(() => {
@@ -259,6 +228,7 @@ export default function CreateAffidavitDialog({ open, onOpenChange }: CreateAffi
     setCategory("")
     setStampValue("")
     setIssuerId("")
+    setIssuerHasWallet(null) // Reset issuer wallet status
     setDescription("")
     setDeclaration("")
     setUserRole("")
@@ -375,6 +345,16 @@ export default function CreateAffidavitDialog({ open, onOpenChange }: CreateAffi
       }
     }
 
+    // Check if Issuer has a connected wallet
+    if (issuerHasWallet === false) {
+      toast({
+        title: "Validation Error",
+        description: "The selected Issuer does not have a connected wallet.",
+        variant: "destructive",
+      })
+      return
+    }
+
     // Check if Seller/Buyer have connected wallets
     if (userRole === "Buyer" && sellerHasWallet === false) {
       toast({
@@ -460,8 +440,8 @@ export default function CreateAffidavitDialog({ open, onOpenChange }: CreateAffi
   // Determine if the user selected themselves as the seller
   const isUserSeller = userRole === "Seller"
 
-  // If wallet check is still loading or data is loading, show a loading state
-  if (hasWallet === null || isLoadingData) {
+  // If data is loading, show a loading state
+  if (isLoadingData) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="sm:max-w-[600px] max-h-[90vh] flex flex-col">
@@ -477,7 +457,7 @@ export default function CreateAffidavitDialog({ open, onOpenChange }: CreateAffi
   }
 
   // If user doesn't have a connected wallet, show a message
-  if (!hasWallet) {
+  if (hasWallet === false) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="sm:max-w-[600px] max-h-[90vh] flex flex-col">
@@ -490,7 +470,7 @@ export default function CreateAffidavitDialog({ open, onOpenChange }: CreateAffi
           <div className="flex-1 flex flex-col items-center justify-center space-y-4">
             <Wallet className="h-12 w-12 text-gray-500" />
             <p className="text-center text-gray-600">
-              Please connect wallet before proceeding or you have to connect wallet to request for affidavit.
+              Please connect a wallet before proceeding.
             </p>
             <Button onClick={() => router.push("/dashboard/settings")}>
               Connect Wallet
@@ -603,6 +583,9 @@ export default function CreateAffidavitDialog({ open, onOpenChange }: CreateAffi
                     </Command>
                   </PopoverContent>
                 </Popover>
+                {issuerId && issuerHasWallet === false && (
+                  <p className="text-red-500 text-sm">Issuer has not connected a wallet yet.</p>
+                )}
               </div>
             </div>
 
@@ -636,7 +619,7 @@ export default function CreateAffidavitDialog({ open, onOpenChange }: CreateAffi
                       <Input
                         id={field.name}
                         type={field.type}
-                        placeholder={`Enter ${field.label}`}
+                        placeholder={`Enter ${field.name}`}
                         value={details[field.name] || ""}
                         onChange={(e) =>
                           handleDetailChange(

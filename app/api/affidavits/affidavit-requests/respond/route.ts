@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import dbConnect from "@/lib/db"
 import AffidavitRequest from "@/lib/models/affidavit-request"
+import User from "@/lib/models/user"
 
 export async function POST(request: NextRequest) {
   try {
@@ -17,11 +18,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Affidavit request not found" }, { status: 404 })
     }
 
+    // Fetch the user to check their active role
+    const user = await User.findById(userId).select("activeRole")
+    if (!user) {
+      return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
+    }
+
     const isAccepted = action === "accept"
 
-    if (role === "seller" && affidavitRequest.sellerId.toString() === userId) {
+    // Handle acceptance/rejection based on role
+    if (role === "issuer" && affidavitRequest.issuerId.toString() === userId) {
+      if (user.activeRole !== "Issuer") {
+        return NextResponse.json({ success: false, error: "Unauthorized: User must have Issuer role" }, { status: 403 })
+      }
+      affidavitRequest.issuerAccepted = isAccepted
+    } else if (role === "seller" && affidavitRequest.sellerId?.toString() === userId) {
       affidavitRequest.sellerAccepted = isAccepted
-    } else if (role === "buyer" && affidavitRequest.buyerId.toString() === userId) {
+    } else if (role === "buyer" && affidavitRequest.buyerId?.toString() === userId) {
       affidavitRequest.buyerAccepted = isAccepted
     } else if (role === "witness") {
       const witness = affidavitRequest.witnesses.find(
@@ -29,21 +42,35 @@ export async function POST(request: NextRequest) {
       )
       if (witness) {
         witness.hasAccepted = isAccepted
+      } else {
+        return NextResponse.json({ success: false, error: "Witness not found" }, { status: 404 })
       }
     } else {
       return NextResponse.json({ success: false, error: "Unauthorized action" }, { status: 403 })
     }
 
-    // Check if all parties have accepted
-    const allAccepted =
-      (affidavitRequest.sellerId ? affidavitRequest.sellerAccepted : true) &&
-      (affidavitRequest.buyerId ? affidavitRequest.buyerAccepted : true) &&
-      affidavitRequest.witnesses.every((w: any) => w.hasAccepted)
-
-    if (allAccepted) {
-      affidavitRequest.status = "approved"
-    } else if (!isAccepted) {
+    // Update status logic:
+    // - Status remains "pending" until the issuer acts.
+    // - If issuer rejects, status becomes "rejected".
+    // - If issuer accepts, status becomes "accepted" only if all other parties have accepted (or are not required to).
+    if (affidavitRequest.issuerAccepted === false) {
       affidavitRequest.status = "rejected"
+    } else if (affidavitRequest.issuerAccepted === true) {
+      const allOtherPartiesAccepted =
+        (affidavitRequest.sellerId ? affidavitRequest.sellerAccepted : true) &&
+        (affidavitRequest.buyerId ? affidavitRequest.buyerAccepted : true) &&
+        affidavitRequest.witnesses.every((w: any) => w.hasAccepted || w.hasAccepted === undefined)
+
+      if (allOtherPartiesAccepted) {
+        affidavitRequest.status = "accepted"
+        // At this point, a smart contract would be triggered to add details to the blockchain
+        // and store the hash, block number, etc., in the allaffidavits table.
+        // This will be implemented later as per your instructions.
+      } else {
+        affidavitRequest.status = "pending"
+      }
+    } else {
+      affidavitRequest.status = "pending"
     }
 
     await affidavitRequest.save()
