@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
       .populate("createdBy", "_id name idCardNumber")
       .populate("witnesses.contactId", "_id name idCardNumber");
 
-    console.log("Populated affidavit requests:", affidavitRequests);
+    console.log("Populated affidavit requests with documents:", JSON.stringify(affidavitRequests, null, 2));
 
     return NextResponse.json({
       success: true,

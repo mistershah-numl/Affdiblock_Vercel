@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Search, Filter, Edit, Trash2, Eye, AlertCircle, FilePlus, CheckCircle, XCircle } from "lucide-react"
+import { Search, Filter, Edit, Trash2, Eye, AlertCircle, FilePlus, CheckCircle, XCircle, Download } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -327,6 +327,10 @@ export default function AffidavitsPage() {
     return sellerAccepted && buyerAccepted && witnessesAccepted
   }
 
+  const isImageFile = (type: string) => {
+    return type.startsWith("image/")
+  }
+
   const renderAffidavitRequestsTable = () => (
     <Card>
       <CardHeader className="pb-2">
@@ -565,7 +569,7 @@ export default function AffidavitsPage() {
         <DialogContent className="sm:max-w-[600px] max-h-[90vh] flex flex-col bg-gradient-to-br from-blue-50 to-indigo-100 p-6 rounded-lg shadow-lg">
           <DialogHeader>
             <DialogTitle className="text-2xl font-bold text-indigo-800">Affidavit Request Details</DialogTitle>
-            <DialogDescription className="text-indigo-600">Review the details and acceptance status.</DialogDescription>
+            <DialogDescription className="text-indigo-600">Review the details, documents, and acceptance status.</DialogDescription>
           </DialogHeader>
           {selectedAffidavitRequest && (
             <div className="space-y-6 flex-1 overflow-y-auto">
@@ -665,6 +669,47 @@ export default function AffidavitsPage() {
                     </div>
                   )}
                 </div>
+              </div>
+
+              <div className="bg-white p-4 rounded-lg shadow-md">
+                <h3 className="text-lg font-semibold text-indigo-700 mb-2">Documents</h3>
+                {selectedAffidavitRequest.documents && selectedAffidavitRequest.documents.length > 0 ? (
+                  <div className="space-y-4">
+                    {selectedAffidavitRequest.documents.map((doc, index) => (
+                      <div key={index} className="flex flex-col gap-2">
+                        {isImageFile(doc.type) ? (
+                          <>
+                            <img
+                              src={doc.url}
+                              alt={doc.name}
+                              className="max-w-full h-auto rounded-md shadow-sm"
+                              style={{ maxHeight: "200px", objectFit: "contain" }}
+                            />
+                            <a
+                              href={doc.url}
+                              download={doc.name}
+                              className="text-indigo-600 hover:underline flex items-center gap-1 text-sm"
+                            >
+                              <Download className="h-4 w-4" />
+                              Download {doc.name}
+                            </a>
+                          </>
+                        ) : (
+                          <a
+                            href={doc.url}
+                            download={doc.name}
+                            className="text-indigo-600 hover:underline flex items-center gap-1 text-sm"
+                          >
+                            <Download className="h-4 w-4" />
+                            Download {doc.name} ({doc.type})
+                          </a>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-700">No documents available.</p>
+                )}
               </div>
 
               <div className="bg-white p-4 rounded-lg shadow-md">
