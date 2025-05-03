@@ -90,7 +90,7 @@ export function AppSidebar() {
       {
         icon: <FileText className="h-5 w-5" />,
         label: "Affidavit Requests",
-        href: "/dashboard/affidavit-requests",
+        href: "/dashboard/affidavits",
       },
       {
         icon: <FileCheck className="h-5 w-5" />,

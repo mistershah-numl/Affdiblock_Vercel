@@ -40,21 +40,22 @@ interface Affidavit {
 
 interface AffidavitRequest {
   _id: string
+  displayId: string
   title: string
   category: string
-  issuerId: { name: string; area: string }
-  issuerAccepted: boolean // Added issuerAccepted field
+  issuerId: { _id: string; name: string; area: string; idCardNumber: string }
+  issuerAccepted: boolean | null
   description: string
   declaration: string
   userRole: string
-  sellerId?: { name: string; idCardNumber: string }
-  sellerAccepted: boolean
-  buyerId?: { name: string; idCardNumber: string }
-  buyerAccepted: boolean
-  witnesses: Array<{ contactId: { name: string; idCardNumber: string }; hasAccepted: boolean }>
+  sellerId?: { _id: string; name: string; idCardNumber: string }
+  sellerAccepted: boolean | null
+  buyerId?: { _id: string; name: string; idCardNumber: string }
+  buyerAccepted: boolean | null
+  witnesses: Array<{ contactId: { _id: string; name: string; idCardNumber: string }; hasAccepted: boolean | null }>
   documents: Array<{ url: string; name: string; type: string }>
   details: Record<string, string | number>
-  createdBy: { name: string; idCardNumber: string }
+  createdBy: { _id: string; name: string; idCardNumber: string }
   initiatorIdCardNumber: string
   status: string
   createdAt: string
@@ -75,10 +76,8 @@ export default function AffidavitsPage() {
   const [affidavitRequests, setAffidavitRequests] = useState<AffidavitRequest[]>([])
   const [isLoadingRequests, setIsLoadingRequests] = useState(true)
 
-  // Mock user role - in a real app, this would come from authentication
   const userRole = user?.activeRole || "User"
 
-  // Mock affidavits data
   const affidavits: Affidavit[] = [
     {
       id: "AFF-2025-001",
@@ -168,29 +167,30 @@ export default function AffidavitsPage() {
     },
   ]
 
-  // Fetch affidavit requests when the component mounts
   useEffect(() => {
     if (user?._id) {
       fetchAffidavitRequests()
     } else {
       setIsLoadingRequests(false)
       setAffidavitRequests([])
+      toast({
+        title: "Error",
+        description: "User not authenticated. Please log in to view affidavit requests.",
+        variant: "destructive",
+      })
     }
   }, [user?._id])
 
   const fetchAffidavitRequests = async () => {
     setIsLoadingRequests(true)
     try {
-      const response = await fetch(`/api/affidavits/affidavit-requests/get?userId=${user?._id}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+      const response = await fetch(`/api/affidavits/affidavit-requests/get?userId=${user?._id}&activeRole=${userRole}`, {
+        headers: { Authorization: `Bearer ${token}` },
       })
-
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
+        const errorData = await response.json()
+        throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
       }
-
       const data = await response.json()
       if (data.success) {
         setAffidavitRequests(data.affidavitRequests || [])
@@ -202,12 +202,15 @@ export default function AffidavitsPage() {
           variant: "destructive",
         })
       }
-    } catch (error) {
-      console.error("Error fetching affidavit requests:", error)
-      setAffidavitRequests([]) // Set to empty array instead of crashing
+    } catch (error: any) {
+      console.error("Error fetching affidavit requests:", {
+        message: error.message,
+        status: error.status,
+      })
+      setAffidavitRequests([])
       toast({
         title: "Error",
-        description: "No affidavit requests found for your ID",
+        description: error.message || "Failed to fetch affidavit requests. Please try again later.",
         variant: "destructive",
       })
     } finally {
@@ -216,44 +219,24 @@ export default function AffidavitsPage() {
   }
 
   const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "Active":
+    switch (status.toLowerCase()) {
+      case "active":
       case "accepted":
-        return <Badge className="bg-green-500">Active</Badge>
-      case "Pending":
+        return <Badge className="bg-green-500 text-white">Accepted</Badge>
       case "pending":
-        return (
-          <Badge variant="outline" className="text-orange-500 border-orange-500">
-            Pending
-          </Badge>
-        )
-      case "Rejected":
+        return <Badge variant="outline" className="text-orange-500 border-orange-500">Pending</Badge>
       case "rejected":
         return <Badge variant="destructive">Rejected</Badge>
-      case "Revoked":
-        return (
-          <Badge variant="secondary" className="bg-gray-500 text-white">
-            Revoked
-          </Badge>
-        )
+      case "revoked":
+        return <Badge variant="secondary" className="bg-gray-500 text-white">Revoked</Badge>
       default:
         return <Badge variant="secondary">{status}</Badge>
     }
   }
 
-  // Filter affidavits based on search query, status, and category
   const filteredAffidavits = affidavits.filter((affidavit) => {
-    // For regular users, only show their own affidavits
-    if (userRole === "User" && affidavit.userId !== user?._id) {
-      return false
-    }
-
-    // For issuers, only show affidavits they issued
-    if (userRole === "Issuer" && affidavit.issuerId !== "issuer1") {
-      return false
-    }
-
-    // Apply search filter
+    if (userRole === "User" && affidavit.userId !== user?._id) return false
+    if (userRole === "Issuer" && affidavit.issuerId !== user?._id) return false
     const matchesSearch =
       affidavit.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       affidavit.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -264,34 +247,21 @@ export default function AffidavitsPage() {
           party.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
           party.idCard.toLowerCase().includes(searchQuery.toLowerCase()),
       )
-
-    // Apply status filter
     const matchesStatus = statusFilter === "all" || affidavit.status.toLowerCase() === statusFilter.toLowerCase()
-
-    // Apply category filter
-    const matchesCategory =
-      categoryFilter === "all" || affidavit.category.toLowerCase() === categoryFilter.toLowerCase()
-
+    const matchesCategory = categoryFilter === "all" || affidavit.category.toLowerCase() === categoryFilter.toLowerCase()
     return matchesSearch && matchesStatus && matchesCategory
   })
 
-  // Filter affidavit requests based on search query and status
   const filteredAffidavitRequests = affidavitRequests.filter((request) => {
-    // Apply search filter
     const matchesSearch =
       request.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      request.displayId.toLowerCase().includes(searchQuery.toLowerCase()) ||
       request.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
       request.issuerId.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (request.sellerId?.name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
       (request.buyerId?.name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-      request.witnesses.some((witness) =>
-        witness.contactId.name.toLowerCase().includes(searchQuery.toLowerCase()),
-      )
-
-    // Apply status filter
-    const matchesStatus =
-      requestStatusFilter === "all" || request.status.toLowerCase() === requestStatusFilter.toLowerCase()
-
+      request.witnesses.some((w) => w.contactId.name.toLowerCase().includes(searchQuery.toLowerCase()))
+    const matchesStatus = requestStatusFilter === "all" || request.status.toLowerCase() === requestStatusFilter.toLowerCase()
     return matchesSearch && matchesStatus
   })
 
@@ -314,111 +284,136 @@ export default function AffidavitsPage() {
   const handleRespondRequest = async (action: "accept" | "reject") => {
     if (!selectedAffidavitRequest || !user?._id) return
 
-    // Determine the user's role in this affidavit request
-    let role = ""
-    if (selectedAffidavitRequest.issuerId.name === user.name) {
-      role = "issuer"
-    } else if (selectedAffidavitRequest.sellerId && selectedAffidavitRequest.sellerId.name === user.name) {
-      role = "seller"
-    } else if (selectedAffidavitRequest.buyerId && selectedAffidavitRequest.buyerId.name === user.name) {
-      role = "buyer"
-    } else if (
-      selectedAffidavitRequest.witnesses.some((w) => w.contactId.name === user.name)
-    ) {
-      role = "witness"
-    } else {
-      toast({
-        title: "Error",
-        description: "You are not a participant in this affidavit request.",
-        variant: "destructive",
-      })
-      return
-    }
+    console.log("Respond Request Payload:", { requestId: selectedAffidavitRequest._id, userId: user._id, activeRole: user.activeRole, action });
 
     try {
       const response = await fetch("/api/affidavits/affidavit-requests/respond", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          requestId: selectedAffidavitRequest._id,
-          userId: user._id,
-          role,
-          action,
-        }),
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ requestId: selectedAffidavitRequest._id, userId: user._id, activeRole: user.activeRole, action }),
       })
-
       const result = await response.json()
       if (result.success) {
-        toast({
-          title: "Success",
-          description: `You have successfully ${action}ed the affidavit request.`,
-        })
-        // Refresh the affidavit requests
-        fetchAffidavitRequests()
+        toast({ title: "Success", description: `Successfully ${action}ed the affidavit request`, variant: "default" })
+        fetchAffidavitRequests() // Refresh the table with the latest data
         setIsViewRequestDialogOpen(false)
       } else {
-        toast({
-          title: "Error",
-          description: result.error || `Failed to ${action} the affidavit request.`,
-          variant: "destructive",
-        })
+        toast({ title: "Error", description: result.error || `Failed to ${action} the request`, variant: "destructive" })
       }
     } catch (error) {
-      console.error(`Error ${action}ing affidavit request:`, error)
-      toast({
-        title: "Error",
-        description: `An unexpected error occurred while ${action}ing the affidavit request.`,
-        variant: "destructive",
-      })
+      console.error(`Error ${action}ing request:`, error)
+      toast({ title: "Error", description: `Unexpected error while ${action}ing the request`, variant: "destructive" })
     }
   }
 
-  // Check if the user has already responded to the request
   const hasUserResponded = (request: AffidavitRequest) => {
-    if (request.issuerId.name === user?.name) {
-      return request.issuerAccepted !== undefined && request.issuerAccepted !== null
-    }
-    if (request.sellerId && request.sellerId.name === user?.name) {
-      return request.sellerAccepted
-    }
-    if (request.buyerId && request.buyerId.name === user?.name) {
-      return request.buyerAccepted
-    }
-    const witness = request.witnesses.find((w) => w.contactId.name === user?.name)
-    if (witness) {
-      return witness.hasAccepted
-    }
-    return false
+    if (!user) return false
+    if (request.issuerId._id === user._id && request.issuerAccepted !== null) return true
+    if (request.sellerId && request.sellerId._id === user._id && request.sellerAccepted !== null) return true
+    if (request.buyerId && request.buyerId._id === user._id && request.buyerAccepted !== null) return true
+    const witness = request.witnesses.find((w) => w.contactId._id === user._id)
+    return witness ? witness.hasAccepted !== null : false
   }
 
-  // Check if the user has accepted the request
-  const hasUserAccepted = (request: AffidavitRequest) => {
-    if (request.issuerId.name === user?.name) {
-      return request.issuerAccepted
-    }
-    if (request.sellerId && request.sellerId.name === user?.name) {
-      return request.sellerAccepted
-    }
-    if (request.buyerId && request.buyerId.name === user?.name) {
-      return request.buyerAccepted
-    }
-    const witness = request.witnesses.find((w) => w.contactId.name === user?.name)
-    if (witness) {
-      return witness.hasAccepted
-    }
-    return false
+  const isInitiator = (request: AffidavitRequest) => {
+    if (!user) return false
+    return request.createdBy._id === user._id
   }
+
+  const allNonIssuersAccepted = (request: AffidavitRequest) => {
+    const sellerAccepted = request.sellerId ? request.sellerAccepted === true : true
+    const buyerAccepted = request.buyerId ? request.buyerAccepted === true : true
+    const witnessesAccepted = request.witnesses.length > 0 ? request.witnesses.every((w) => w.hasAccepted === true) : true
+    return sellerAccepted && buyerAccepted && witnessesAccepted
+  }
+
+  const renderAffidavitRequestsTable = () => (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle>Affidavit Requests</CardTitle>
+        <CardDescription>View and manage your requests</CardDescription>
+        <div className="flex flex-col md:flex-row gap-4 mt-4">
+          <div className="relative flex-1">
+            <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
+            <Input placeholder="Search requests..." className="pl-8" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+          </div>
+          <div className="flex items-center gap-2">
+            <Filter className="h-4 w-4 text-gray-400" />
+            <Select value={requestStatusFilter} onValueChange={setRequestStatusFilter}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Filter by status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Statuses</SelectItem>
+                <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="accepted">Accepted</SelectItem>
+                <SelectItem value="rejected">Rejected</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>ID</TableHead>
+              <TableHead>Title</TableHead>
+              <TableHead>Category</TableHead>
+              <TableHead>Issuer</TableHead>
+              <TableHead>Date Requested</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {isLoadingRequests ? (
+              <TableRow>
+                <TableCell colSpan={7} className="text-center py-8">
+                  Loading requests...
+                </TableCell>
+              </TableRow>
+            ) : filteredAffidavitRequests.length > 0 ? (
+              filteredAffidavitRequests.map((request) => (
+                <TableRow key={request._id}>
+                  <TableCell className="font-medium">{request.displayId}</TableCell>
+                  <TableCell>{request.title}</TableCell>
+                  <TableCell>{request.category}</TableCell>
+                  <TableCell>{request.issuerId.name}</TableCell>
+                  <TableCell>{new Date(request.createdAt).toLocaleDateString()}</TableCell>
+                  <TableCell>{getStatusBadge(request.status)}</TableCell>
+                  <TableCell className="text-right">
+                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => handleViewRequest(request)}>
+                      <Eye className="h-4 w-4" />
+                      <span className="sr-only">Show</span>
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))
+            ) : (
+              <TableRow>
+                <TableCell colSpan={7} className="text-center py-6">
+                  <div className="flex flex-col items-center justify-center text-gray-500">
+                    <AlertCircle className="h-10 w-10 mb-2" />
+                    <p>No requests found</p>
+                  </div>
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+  )
 
   return (
     <div className="flex flex-col gap-6 p-6">
-      {/* Header Section */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Affidavits</h1>
-          <p className="text-gray-500">Manage and view all affidavits and requests</p>
+          <p className="text-gray-500">
+            {userRole === "Issuer" ? "View and manage affidavit requests" : "Manage and view all affidavits and requests"}
+          </p>
         </div>
         <Button onClick={() => setIsCreateDialogOpen(true)} className="flex items-center gap-2">
           <FilePlus className="h-4 w-4" />
@@ -426,371 +421,276 @@ export default function AffidavitsPage() {
         </Button>
       </div>
 
-      {/* Tabs Section */}
-      <Tabs defaultValue="affidavits" className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="affidavits">Affidavits</TabsTrigger>
-          <TabsTrigger value="affidavit-requests">Affidavit Requests</TabsTrigger>
-        </TabsList>
+      {userRole === "Issuer" ? (
+        renderAffidavitRequestsTable()
+      ) : (
+        <Tabs defaultValue="affidavits" className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="affidavits">Affidavits</TabsTrigger>
+            <TabsTrigger value="affidavit-requests">Affidavit Requests</TabsTrigger>
+          </TabsList>
 
-        {/* Affidavits Tab */}
-        <TabsContent value="affidavits">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle>All Affidavits</CardTitle>
-              <CardDescription>
-                {userRole === "Admin"
-                  ? "View and manage all affidavits in the system"
-                  : userRole === "Issuer"
-                  ? "View and manage affidavits you've issued"
-                  : "View your affidavits and their status"}
-              </CardDescription>
-
-              {/* Filters Section */}
-              <div className="flex flex-col md:flex-row gap-4 mt-4">
-                <div className="relative flex-1">
-                  <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
-                  <Input
-                    placeholder="Search affidavits..."
-                    className="pl-8"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                  />
-                </div>
-                <div className="flex flex-col sm:flex-row items-center gap-2">
-                  <div className="flex items-center gap-2 w-full sm:w-auto">
-                    <Filter className="h-4 w-4 text-gray-400" />
-                    <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <TabsContent value="affidavits">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle>All Affidavits</CardTitle>
+                <CardDescription>
+                  {userRole === "Admin"
+                    ? "View and manage all affidavits"
+                    : userRole === "Issuer"
+                    ? "Manage your issued affidavits"
+                    : "View your affidavits"}
+                </CardDescription>
+                <div className="flex flex-col md:flex-row gap-4 mt-4">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
+                    <Input placeholder="Search affidavits..." className="pl-8" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+                  </div>
+                  <div className="flex flex-col sm:flex-row items-center gap-2">
+                    <div className="flex items-center gap-2 w-full sm:w-auto">
+                      <Filter className="h-4 w-4 text-gray-400" />
+                      <Select value={statusFilter} onValueChange={setStatusFilter}>
+                        <SelectTrigger className="w-[180px]">
+                          <SelectValue placeholder="Filter by status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Statuses</SelectItem>
+                          <SelectItem value="active">Active</SelectItem>
+                          <SelectItem value="pending">Pending</SelectItem>
+                          <SelectItem value="rejected">Rejected</SelectItem>
+                          <SelectItem value="revoked">Revoked</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <Select value={categoryFilter} onValueChange={setCategoryFilter}>
                       <SelectTrigger className="w-[180px]">
-                        <SelectValue placeholder="Filter by status" />
+                        <SelectValue placeholder="Filter by category" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="all">All Statuses</SelectItem>
-                        <SelectItem value="active">Active</SelectItem>
-                        <SelectItem value="pending">Pending</SelectItem>
-                        <SelectItem value="rejected">Rejected</SelectItem>
-                        <SelectItem value="revoked">Revoked</SelectItem>
+                        <SelectItem value="all">All Categories</SelectItem>
+                        <SelectItem value="property">Property</SelectItem>
+                        <SelectItem value="vehicle">Vehicle</SelectItem>
+                        <SelectItem value="business">Business</SelectItem>
+                        <SelectItem value="personal">Personal</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
-                  <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                    <SelectTrigger className="w-[180px]">
-                      <SelectValue placeholder="Filter by category" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Categories</SelectItem>
-                      <SelectItem value="property">Property</SelectItem>
-                      <SelectItem value="vehicle">Vehicle</SelectItem>
-                      <SelectItem value="business">Business</SelectItem>
-                      <SelectItem value="personal">Personal</SelectItem>
-                    </SelectContent>
-                  </Select>
                 </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>ID</TableHead>
-                    <TableHead>Title</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead>Issuer</TableHead>
-                    <TableHead>Date Requested</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredAffidavits.length > 0 ? (
-                    filteredAffidavits.map((affidavit) => (
-                      <TableRow key={affidavit.id}>
-                        <TableCell className="font-medium">{affidavit.id}</TableCell>
-                        <TableCell>{affidavit.title}</TableCell>
-                        <TableCell>{affidavit.category}</TableCell>
-                        <TableCell>{affidavit.issuer}</TableCell>
-                        <TableCell>{affidavit.dateRequested}</TableCell>
-                        <TableCell>{getStatusBadge(affidavit.status)}</TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-2">
-                            <Button asChild variant="ghost" size="sm" className="h-8 w-8 p-0">
-                              <Link href={`/affidavit/${affidavit.id}`}>
-                                <Eye className="h-4 w-4" />
-                                <span className="sr-only">View</span>
-                              </Link>
-                            </Button>
-
-                            {(userRole === "Admin" || (userRole === "Issuer" && affidavit.issuerId === "issuer1")) && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-8 w-8 p-0"
-                                onClick={() => router.push(`/affidavit/${affidavit.id}/edit`)}
-                              >
-                                <Edit className="h-4 w-4" />
-                                <span className="sr-only">Edit</span>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>ID</TableHead>
+                      <TableHead>Title</TableHead>
+                      <TableHead>Category</TableHead>
+                      <TableHead>Issuer</TableHead>
+                      <TableHead>Date Requested</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredAffidavits.length > 0 ? (
+                      filteredAffidavits.map((affidavit) => (
+                        <TableRow key={affidavit.id}>
+                          <TableCell className="font-medium">{affidavit.id}</TableCell>
+                          <TableCell>{affidavit.title}</TableCell>
+                          <TableCell>{affidavit.category}</TableCell>
+                          <TableCell>{affidavit.issuer}</TableCell>
+                          <TableCell>{affidavit.dateRequested}</TableCell>
+                          <TableCell>{getStatusBadge(affidavit.status)}</TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-2">
+                              <Button asChild variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                <Link href={`/affidavit/${affidavit.id}`}>
+                                  <Eye className="h-4 w-4" />
+                                  <span className="sr-only">View</span>
+                                </Link>
                               </Button>
-                            )}
-
-                            {userRole === "Admin" && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-8 w-8 p-0 text-red-500 hover:text-red-600 hover:bg-red-50"
-                                onClick={() => handleDeleteClick(affidavit.id)}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                                <span className="sr-only">Delete</span>
-                              </Button>
-                            )}
+                              {(userRole === "Admin" || (userRole === "Issuer" && affidavit.issuerId === user?._id)) && (
+                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => router.push(`/affidavit/${affidavit.id}/edit`)}>
+                                  <Edit className="h-4 w-4" />
+                                  <span className="sr-only">Edit</span>
+                                </Button>
+                              )}
+                              {userRole === "Admin" && (
+                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-500 hover:text-red-600 hover:bg-red-50" onClick={() => handleDeleteClick(affidavit.id)}>
+                                  <Trash2 className="h-4 w-4" />
+                                  <span className="sr-only">Delete</span>
+                                </Button>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center py-6">
+                          <div className="flex flex-col items-center justify-center text-gray-500">
+                            <AlertCircle className="h-10 w-10 mb-2" />
+                            <p>No affidavits found</p>
                           </div>
                         </TableCell>
                       </TableRow>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={7} className="text-center py-6">
-                        <div className="flex flex-col items-center justify-center text-gray-500">
-                          <AlertCircle className="h-10 w-10 mb-2" />
-                          <p>No affidavits found matching your search criteria</p>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-        {/* Affidavit Requests Tab */}
-        <TabsContent value="affidavit-requests">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle>Affidavit Requests</CardTitle>
-              <CardDescription>
-                View and manage your affidavit requests
-              </CardDescription>
+          <TabsContent value="affidavit-requests">
+            {renderAffidavitRequestsTable()}
+          </TabsContent>
+        </Tabs>
+      )}
 
-              {/* Filters Section */}
-              <div className="flex flex-col md:flex-row gap-4 mt-4">
-                <div className="relative flex-1">
-                  <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
-                  <Input
-                    placeholder="Search affidavit requests..."
-                    className="pl-8"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                  />
-                </div>
-                <div className="flex items-center gap-2">
-                  <Filter className="h-4 w-4 text-gray-400" />
-                  <Select value={requestStatusFilter} onValueChange={setRequestStatusFilter}>
-                    <SelectTrigger className="w-[180px]">
-                      <SelectValue placeholder="Filter by status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Statuses</SelectItem>
-                      <SelectItem value="pending">Pending</SelectItem>
-                      <SelectItem value="accepted">Accepted</SelectItem>
-                      <SelectItem value="rejected">Rejected</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>ID</TableHead>
-                    <TableHead>Title</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead>Issuer</TableHead>
-                    <TableHead>Date Requested</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {isLoadingRequests ? (
-                    <TableRow>
-                      <TableCell colSpan={7} className="text-center py-8">
-                        Loading affidavit requests...
-                      </TableCell>
-                    </TableRow>
-                  ) : filteredAffidavitRequests.length > 0 ? (
-                    filteredAffidavitRequests.map((request) => (
-                      <TableRow key={request._id}>
-                        <TableCell className="font-medium">{request._id}</TableCell>
-                        <TableCell>{request.title}</TableCell>
-                        <TableCell>{request.category}</TableCell>
-                        <TableCell>{request.issuerId.name}</TableCell>
-                        <TableCell>{new Date(request.createdAt).toLocaleDateString()}</TableCell>
-                        <TableCell>{getStatusBadge(request.status)}</TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 w-8 p-0"
-                            onClick={() => handleViewRequest(request)}
-                          >
-                            <Eye className="h-4 w-4" />
-                            <span className="sr-only">Show</span>
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={7} className="text-center py-6">
-                        <div className="flex flex-col items-center justify-center text-gray-500">
-                          <AlertCircle className="h-10 w-10 mb-2" />
-                          <p>No affidavit requests found for your ID</p>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
-
-      {/* Create Affidavit Dialog */}
       <CreateAffidavitDialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen} />
 
-      {/* Delete Confirmation Dialog */}
       <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Delete Affidavit</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete this affidavit? This action cannot be undone.
-            </DialogDescription>
+            <DialogDescription>Are you sure you want to delete this affidavit? This action cannot be undone.</DialogDescription>
           </DialogHeader>
-          <DialogFooter className="flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2">
-            <Button type="button" variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button type="button" variant="destructive" onClick={handleDeleteConfirm}>
-              Delete
-            </Button>
+          <DialogFooter className="flex flex-col-reverse sm:flex-row sm:justify-center sm:space-x-2">
+            <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>Cancel</Button>
+            <Button variant="destructive" onClick={handleDeleteConfirm}>Delete</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* View Affidavit Request Dialog */}
       <Dialog open={isViewRequestDialogOpen} onOpenChange={setIsViewRequestDialogOpen}>
-        <DialogContent className="sm:max-w-[600px] max-h-[90vh] flex flex-col">
+        <DialogContent className="sm:max-w-[600px] max-h-[90vh] flex flex-col bg-gradient-to-br from-blue-50 to-indigo-100 p-6 rounded-lg shadow-lg">
           <DialogHeader>
-            <DialogTitle>Affidavit Request Details</DialogTitle>
-            <DialogDescription>
-              View the details of the affidavit request and acceptance status.
-            </DialogDescription>
+            <DialogTitle className="text-2xl font-bold text-indigo-800">Affidavit Request Details</DialogTitle>
+            <DialogDescription className="text-indigo-600">Review the details and acceptance status.</DialogDescription>
           </DialogHeader>
           {selectedAffidavitRequest && (
-            <div className="space-y-4 flex-1 overflow-y-auto">
-              <div>
-                <Label>ID</Label>
-                <p className="text-sm text-gray-500">{selectedAffidavitRequest._id}</p>
-              </div>
-              <div>
-                <Label>Title</Label>
-                <p className="text-sm text-gray-500">{selectedAffidavitRequest.title}</p>
-              </div>
-              <div>
-                <Label>Category</Label>
-                <p className="text-sm text-gray-500">{selectedAffidavitRequest.category}</p>
-              </div>
-              <div>
-                <Label>Issuer</Label>
-                <p className="text-sm text-gray-500">
-                  {selectedAffidavitRequest.issuerId.name} (Area: {selectedAffidavitRequest.issuerId.area || "N/A"})
-                  {selectedAffidavitRequest.issuerAccepted ? (
-                    <CheckCircle className="inline-block h-4 w-4 ml-2 text-green-500" />
-                  ) : selectedAffidavitRequest.issuerAccepted === false ? (
-                    <XCircle className="inline-block h-4 w-4 ml-2 text-red-500" />
-                  ) : (
-                    <span className="inline-block ml-2 text-orange-500">Pending</span>
-                  )}
-                </p>
-              </div>
-              <div>
-                <Label>Description</Label>
-                <p className="text-sm text-gray-500">{selectedAffidavitRequest.description}</p>
-              </div>
-              <div>
-                <Label>Declaration</Label>
-                <p className="text-sm text-gray-500">{selectedAffidavitRequest.declaration}</p>
-              </div>
-              <div>
-                <Label>Initiator</Label>
-                <p className="text-sm text-gray-500">
-                  {selectedAffidavitRequest.createdBy.name} (ID Card: {selectedAffidavitRequest.initiatorIdCardNumber})
-                </p>
-              </div>
-              {selectedAffidavitRequest.sellerId && (
-                <div>
-                  <Label>Seller</Label>
-                  <p className="text-sm text-gray-500">
-                    {selectedAffidavitRequest.sellerId.name} (ID Card: {selectedAffidavitRequest.sellerId.idCardNumber})
-                    {selectedAffidavitRequest.sellerAccepted ? (
-                      <CheckCircle className="inline-block h-4 w-4 ml-2 text-green-500" />
-                    ) : (
-                      <XCircle className="inline-block h-4 w-4 ml-2 text-red-500" />
-                    )}
-                  </p>
+            <div className="space-y-6 flex-1 overflow-y-auto">
+              <div className="bg-white p-4 rounded-lg shadow-md">
+                <h3 className="text-lg font-semibold text-indigo-700 mb-2">General Information</h3>
+                <div className="space-y-2">
+                  <div>
+                    <Label className="text-indigo-600 font-medium">ID</Label>
+                    <p className="text-sm text-gray-700">{selectedAffidavitRequest.displayId}</p>
+                  </div>
+                  <div>
+                    <Label className="text-indigo-600 font-medium">Title</Label>
+                    <p className="text-sm text-gray-700">{selectedAffidavitRequest.title}</p>
+                  </div>
+                  <div>
+                    <Label className="text-indigo-600 font-medium">Category</Label>
+                    <p className="text-sm text-gray-700">{selectedAffidavitRequest.category}</p>
+                  </div>
+                  <div>
+                    <Label className="text-indigo-600 font-medium">Description</Label>
+                    <p className="text-sm text-gray-700">{selectedAffidavitRequest.description}</p>
+                  </div>
+                  <div>
+                    <Label className="text-indigo-600 font-medium">Declaration</Label>
+                    <p className="text-sm text-gray-700">{selectedAffidavitRequest.declaration}</p>
+                  </div>
                 </div>
-              )}
-              {selectedAffidavitRequest.buyerId && (
-                <div>
-                  <Label>Buyer</Label>
-                  <p className="text-sm text-gray-500">
-                    {selectedAffidavitRequest.buyerId.name} (ID Card: {selectedAffidavitRequest.buyerId.idCardNumber})
-                    {selectedAffidavitRequest.buyerAccepted ? (
-                      <CheckCircle className="inline-block h-4 w-4 ml-2 text-green-500" />
-                    ) : (
-                      <XCircle className="inline-block h-4 w-4 ml-2 text-red-500" />
-                    )}
-                  </p>
-                </div>
-              )}
-              {selectedAffidavitRequest.witnesses.length > 0 && (
-                <div>
-                  <Label>Witnesses</Label>
-                  {selectedAffidavitRequest.witnesses.map((witness, index) => (
-                    <p key={index} className="text-sm text-gray-500">
-                      {witness.contactId.name} (ID Card: {witness.contactId.idCardNumber})
-                      {witness.hasAccepted ? (
+              </div>
+
+              <div className="bg-white p-4 rounded-lg shadow-md">
+                <h3 className="text-lg font-semibold text-indigo-700 mb-2">Involved Parties</h3>
+                <div className="space-y-3">
+                  <div>
+                    <Label className="text-indigo-600 font-medium">Initiator</Label>
+                    <p className="text-sm text-gray-700">
+                      {selectedAffidavitRequest.createdBy.name} (ID Card: {selectedAffidavitRequest.initiatorIdCardNumber})
+                    </p>
+                  </div>
+                  <div>
+                    <Label className="text-indigo-600 font-medium">Issuer</Label>
+                    <p className="text-sm text-gray-700">
+                      {selectedAffidavitRequest.issuerId.name} (ID Card: {selectedAffidavitRequest.issuerId.idCardNumber}, Area: {selectedAffidavitRequest.issuerId.area || "N/A"})
+                      {selectedAffidavitRequest.issuerAccepted === true ? (
                         <CheckCircle className="inline-block h-4 w-4 ml-2 text-green-500" />
-                      ) : witness.hasAccepted === false ? (
+                      ) : selectedAffidavitRequest.issuerAccepted === false ? (
                         <XCircle className="inline-block h-4 w-4 ml-2 text-red-500" />
                       ) : (
                         <span className="inline-block ml-2 text-orange-500">Pending</span>
                       )}
                     </p>
-                  ))}
+                  </div>
+                  {selectedAffidavitRequest.sellerId && (
+                    <div>
+                      <Label className="text-indigo-600 font-medium">Seller</Label>
+                      <p className="text-sm text-gray-700">
+                        {selectedAffidavitRequest.sellerId.name} (ID Card: {selectedAffidavitRequest.sellerId.idCardNumber})
+                        {selectedAffidavitRequest.sellerAccepted === true ? (
+                          <CheckCircle className="inline-block h-4 w-4 ml-2 text-green-500" />
+                        ) : selectedAffidavitRequest.sellerAccepted === false ? (
+                          <XCircle className="inline-block h-4 w-4 ml-2 text-red-500" />
+                        ) : (
+                          <span className="inline-block ml-2 text-orange-500">Pending</span>
+                        )}
+                      </p>
+                    </div>
+                  )}
+                  {selectedAffidavitRequest.buyerId && (
+                    <div>
+                      <Label className="text-indigo-600 font-medium">Buyer</Label>
+                      <p className="text-sm text-gray-700">
+                        {selectedAffidavitRequest.buyerId.name} (ID Card: {selectedAffidavitRequest.buyerId.idCardNumber})
+                        {selectedAffidavitRequest.buyerAccepted === true ? (
+                          <CheckCircle className="inline-block h-4 w-4 ml-2 text-green-500" />
+                        ) : selectedAffidavitRequest.buyerAccepted === false ? (
+                          <XCircle className="inline-block h-4 w-4 ml-2 text-red-500" />
+                        ) : (
+                          <span className="inline-block ml-2 text-orange-500">Pending</span>
+                        )}
+                      </p>
+                    </div>
+                  )}
+                  {selectedAffidavitRequest.witnesses.length > 0 && (
+                    <div>
+                      <Label className="text-indigo-600 font-medium">Witnesses</Label>
+                      {selectedAffidavitRequest.witnesses.map((witness, index) => (
+                        <p key={index} className="text-sm text-gray-700">
+                          {witness.contactId.name} (ID Card: {witness.contactId.idCardNumber})
+                          {witness.hasAccepted === true ? (
+                            <CheckCircle className="inline-block h-4 w-4 ml-2 text-green-500" />
+                          ) : witness.hasAccepted === false ? (
+                            <XCircle className="inline-block h-4 w-4 ml-2 text-red-500" />
+                          ) : (
+                            <span className="inline-block ml-2 text-orange-500">Pending</span>
+                          )}
+                        </p>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              )}
-              <div>
-                <Label>Status</Label>
-                <p className="text-sm text-gray-500">{selectedAffidavitRequest.status}</p>
+              </div>
+
+              <div className="bg-white p-4 rounded-lg shadow-md">
+                <h3 className="text-lg font-semibold text-indigo-700 mb-2">Status</h3>
+                <div className="text-sm text-gray-700">{getStatusBadge(selectedAffidavitRequest.status)}</div>
               </div>
             </div>
           )}
-          <DialogFooter className="flex flex-col sm:flex-row sm:justify-end sm:space-x-2">
-            <Button variant="outline" onClick={() => setIsViewRequestDialogOpen(false)}>
-              Close
-            </Button>
-            {selectedAffidavitRequest && !hasUserResponded(selectedAffidavitRequest) && (
-              <>
-                <Button onClick={() => handleRespondRequest("accept")}>Accept</Button>
-                <Button variant="destructive" onClick={() => handleRespondRequest("reject")}>
-                  Reject
-                </Button>
-              </>
+          <DialogFooter className="flex flex-col sm:flex-row sm:justify-center sm:space-x-2 mt-4">
+            <Button variant="outline" onClick={() => setIsViewRequestDialogOpen(false)}>Close</Button>
+            {selectedAffidavitRequest && user && !hasUserResponded(selectedAffidavitRequest) && !isInitiator(selectedAffidavitRequest) && (
+              userRole === "Issuer" && selectedAffidavitRequest.issuerId._id === user._id ? (
+                allNonIssuersAccepted(selectedAffidavitRequest) ? (
+                  <>
+                    <Button onClick={() => handleRespondRequest("accept")} className="bg-green-500 hover:bg-green-600 text-white">Accept</Button>
+                    <Button onClick={() => handleRespondRequest("reject")} className="bg-red-500 hover:bg-red-600 text-white">Reject</Button>
+                  </>
+                ) : (
+                  <p className="text-red-500 text-sm mt-2">You can only accept if all parties accept this affidavit.</p>
+                )
+              ) : (
+                <>
+                  <Button onClick={() => handleRespondRequest("accept")} className="bg-green-500 hover:bg-green-600 text-white">Accept</Button>
+                  <Button onClick={() => handleRespondRequest("reject")} className="bg-red-500 hover:bg-red-600 text-white">Reject</Button>
+                </>
+              )
             )}
           </DialogFooter>
         </DialogContent>
