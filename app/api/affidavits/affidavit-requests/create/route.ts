@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import {dbConnect} from "@/lib/db"
+import { dbConnect } from "@/lib/db"
 import AffidavitRequest from "@/lib/models/affidavit-request"
 import User from "@/lib/models/user"
 import { uploadFile } from "@/lib/upload"
@@ -49,16 +49,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Creator not found" }, { status: 404 })
     }
 
-    // Fetch ID card numbers and wallet addresses for issuer, seller, buyer, and witnesses
+    // Fetch ID card numbers for issuer, seller, buyer, and witnesses
     const issuer = await User.findById(issuerId)
     if (!issuer) {
       return NextResponse.json({ success: false, error: "Issuer not found" }, { status: 404 })
     }
     const issuerIdCardNumber = issuer.idCardNumber
-    const issuerWalletAddress = issuer.walletAddress || "0x0000000000000000000000000000000000000000"
 
     let sellerIdCardNumber = null
-    let sellerWalletAddress = "0x0000000000000000000000000000000000000000"
     let seller = null
     if (sellerId) {
       seller = await User.findById(sellerId)
@@ -66,11 +64,9 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, error: "Seller not found" }, { status: 404 })
       }
       sellerIdCardNumber = seller.idCardNumber
-      sellerWalletAddress = seller.walletAddress || "0x0000000000000000000000000000000000000000"
     }
 
     let buyerIdCardNumber = null
-    let buyerWalletAddress = "0x0000000000000000000000000000000000000000"
     let buyer = null
     if (buyerId) {
       buyer = await User.findById(buyerId)
@@ -78,7 +74,6 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, error: "Buyer not found" }, { status: 404 })
       }
       buyerIdCardNumber = buyer.idCardNumber
-      buyerWalletAddress = buyer.walletAddress || "0x0000000000000000000000000000000000000000"
     }
 
     const witnessesWithIdCard = await Promise.all(
@@ -146,10 +141,10 @@ export async function POST(request: NextRequest) {
       category,
       description,
       declaration,
-      issuer: { id: issuerId, walletAddress: issuerWalletAddress },
-      seller: sellerId ? { id: sellerId, walletAddress: sellerWalletAddress } : null,
-      buyer: buyerId ? { id: buyerId, walletAddress: buyerWalletAddress } : null,
-      witnesses: witnessesWithIdCard.map((w: any) => ({ id: w.contactId, walletAddress: w.walletAddress || "0x0000000000000000000000000000000000000000" })),
+      issuer: { id: issuerId, idCardNumber: issuerIdCardNumber },
+      seller: sellerId ? { id: sellerId, idCardNumber: sellerIdCardNumber } : null,
+      buyer: buyerId ? { id: buyerId, idCardNumber: buyerIdCardNumber } : null,
+      witnesses: witnessesWithIdCard.map((w: any) => ({ id: w.contactId, idCardNumber: w.idCardNumber })),
       documents: uploadedDocuments,
       dateRequested: new Date().toISOString(),
       dateIssued: null,

@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
       .populate("issuerId", "_id name area idCardNumber walletAddress")
       .populate("sellerId", "_id name idCardNumber walletAddress")
       .populate("buyerId", "_id name idCardNumber walletAddress")
-      .populate("createdBy", "_id name idCardNumber")
+      .populate("createdBy", "_id name idCardNumber walletAddress")
       .populate("witnesses.contactId", "_id name idCardNumber")
 
     if (!affidavitRequest) {
@@ -86,12 +86,26 @@ export async function POST(request: NextRequest) {
 
     const isAccepted = action === "accept"
     let affidavitData = null
-    const createdAffidavitId = null
 
     if (activeRole === "Issuer" && affidavitRequest.issuerId._id.toString() === userId) {
       affidavitRequest.issuerAccepted = isAccepted
 
       if (isAccepted) {
+        // Check wallet connectivity for all parties except witnesses
+        const partiesToCheck = [
+          { role: "issuer", id: affidavitRequest.issuerId._id.toString(), wallet: affidavitRequest.issuerId.walletAddress },
+          ...(affidavitRequest.sellerId ? [{ role: "seller", id: affidavitRequest.sellerId._id.toString(), wallet: affidavitRequest.sellerId.walletAddress }] : []),
+          ...(affidavitRequest.buyerId ? [{ role: "buyer", id: affidavitRequest.buyerId._id.toString(), wallet: affidavitRequest.buyerId.walletAddress }] : []),
+        ]
+
+        const missingWallets = partiesToCheck.filter(p => !p.wallet || p.wallet === "")
+        if (missingWallets.length > 0) {
+          return NextResponse.json(
+            { success: false, error: `Missing wallet address for ${missingWallets.map(p => p.role).join(", ")}` },
+            { status: 400 }
+          )
+        }
+
         const allPartiesAccepted =
           (affidavitRequest.sellerId ? affidavitRequest.sellerAccepted === true : true) &&
           (affidavitRequest.buyerId ? affidavitRequest.buyerAccepted === true : true) &&
@@ -137,15 +151,15 @@ export async function POST(request: NextRequest) {
             declaration: affidavitRequest.declaration,
             issuer: {
               id: affidavitRequest.issuerId._id.toString(),
-              walletAddress: affidavitRequest.issuerId.walletAddress,
+              idCardNumber: affidavitRequest.issuerId.idCardNumber,
             },
             seller: affidavitRequest.sellerId
-              ? { id: affidavitRequest.sellerId._id.toString(), walletAddress: affidavitRequest.sellerId.walletAddress }
+              ? { id: affidavitRequest.sellerId._id.toString(), idCardNumber: affidavitRequest.sellerId.idCardNumber }
               : null,
             buyer: affidavitRequest.buyerId
-              ? { id: affidavitRequest.buyerId._id.toString(), walletAddress: affidavitRequest.buyerId.walletAddress }
+              ? { id: affidavitRequest.buyerId._id.toString(), idCardNumber: affidavitRequest.buyerId.idCardNumber }
               : null,
-            witnesses: affidavitRequest.witnesses.map((w) => ({ id: w.contactId._id.toString() })),
+            witnesses: affidavitRequest.witnesses.map((w) => ({ id: w.contactId._id.toString(), idCardNumber: w.contactId.idCardNumber })),
             documents: documentsWithIPFS
               .filter((doc) => doc.ipfsHash)
               .map((doc) => ({
@@ -160,27 +174,26 @@ export async function POST(request: NextRequest) {
           ipfsHash = await uploadJSONToIPFS(affidavitMetadata, `Affidavit-${displayId}`)
         }
 
-        const getWalletAddress = async (userId: string) => {
-          const user = await User.findById(userId).select("walletAddress")
-          if (!user || !user.walletAddress) {
-            throw new Error(`Wallet address not found for user ${userId}`)
+        const getIdCardNumber = async (userId: string) => {
+          const user = await User.findById(userId).select("idCardNumber")
+          if (!user || !user.idCardNumber) {
+            throw new Error(`ID card number not found for user ${userId}`)
           }
-          return user.walletAddress
+          return user.idCardNumber
         }
 
-        const issuerAddress = await getWalletAddress(affidavitRequest.issuerId._id.toString())
-        const sellerAddress = affidavitRequest.sellerId
-          ? await getWalletAddress(affidavitRequest.sellerId._id.toString())
-          : "0x0000000000000000000000000000000000000000"
-        const buyerAddress = affidavitRequest.buyerId
-          ? await getWalletAddress(affidavitRequest.buyerId._id.toString())
-          : "0x0000000000000000000000000000000000000000"
+        const issuerIdCard = await getIdCardNumber(affidavitRequest.issuerId._id.toString())
+        const sellerIdCard = affidavitRequest.sellerId
+          ? await getIdCardNumber(affidavitRequest.sellerId._id.toString())
+          : undefined
+        const buyerIdCard = affidavitRequest.buyerId
+          ? await getIdCardNumber(affidavitRequest.buyerId._id.toString())
+          : undefined
 
         affidavitRequest.status = "accepted"
         await affidavitRequest.save()
 
         // Create the affidavit in the database with empty blockchain details
-        // These will be updated after the blockchain transaction
         const newAffidavit = new Affidavit({
           displayId,
           title: affidavitRequest.title,
@@ -189,13 +202,13 @@ export async function POST(request: NextRequest) {
           declaration: affidavitRequest.declaration,
           issuerId: affidavitRequest.issuerId._id,
           issuerName: affidavitRequest.issuerId.name,
-          issuerWalletAddress: issuerAddress,
+          issuerIdCardNumber: issuerIdCard,
           sellerId: affidavitRequest.sellerId?._id,
           sellerName: affidavitRequest.sellerId?.name,
-          sellerWalletAddress: sellerAddress,
+          sellerIdCardNumber: sellerIdCard,
           buyerId: affidavitRequest.buyerId?._id,
           buyerName: affidavitRequest.buyerId?.name,
-          buyerWalletAddress: buyerAddress,
+          buyerIdCardNumber: buyerIdCard,
           witnesses: affidavitRequest.witnesses.map((w) => ({
             contactId: w.contactId._id,
             name: w.contactId.name,
@@ -226,10 +239,10 @@ export async function POST(request: NextRequest) {
           category: affidavitRequest.category,
           description: affidavitRequest.description,
           declaration: affidavitRequest.declaration,
-          issuerAddress,
-          sellerAddress,
-          buyerAddress,
-          witnessIds: affidavitRequest.witnesses.map((w) => w.contactId._id.toString()),
+          issuerIdCard,
+          sellerIdCard: sellerIdCard || "N/A",
+          buyerIdCard: buyerIdCard || "N/A",
+          witnessIds: affidavitRequest.witnesses.map((w) => w.contactId.idCardNumber),
           ipfsHash,
           documents: documentsWithIPFS,
         }

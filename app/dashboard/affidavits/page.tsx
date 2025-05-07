@@ -321,7 +321,7 @@ export default function AffidavitsPage() {
         return
       }
 
-      // For issuer accepting, we need to handle the blockchain transaction
+      // For issuer accepting, handle the blockchain transaction
       setIsProcessingBlockchain(true)
 
       // Step 1: Create the affidavit in the database (without blockchain details)
@@ -375,22 +375,23 @@ export default function AffidavitsPage() {
         signer,
       )
 
+      // Since the contract expects addresses but we only store ID card numbers, pass zero addresses
+      const zeroAddress = "0x0000000000000000000000000000000000000000"
+      const witnessIds = affidavitData.witnessIds.length > 0 ? affidavitData.witnessIds : ["0"]
+      const ipfsHash = affidavitData.ipfsHash || ""
+
       console.log("Blockchain Deployment Data:", {
         affidavitId: affidavitData.affidavitId,
         title: affidavitData.title,
         category: affidavitData.category,
         description: affidavitData.description,
         declaration: affidavitData.declaration,
-        issuerAddress: affidavitData.issuerAddress,
-        sellerAddress: affidavitData.sellerAddress,
-        buyerAddress: affidavitData.buyerAddress,
-        witnessIds: affidavitData.witnessIds,
-        ipfsHash: affidavitData.ipfsHash,
+        issuer: zeroAddress,
+        seller: zeroAddress,
+        buyer: zeroAddress,
+        witnessIds,
+        ipfsHash,
       })
-
-      const witnessIds =
-        affidavitData.witnessIds.length > 0 ? affidavitData.witnessIds : ["0x0000000000000000000000000000000000000000"]
-      const ipfsHash = affidavitData.ipfsHash || ""
 
       const gasEstimate = await contract.createAffidavit
         .estimateGas(
@@ -399,9 +400,9 @@ export default function AffidavitsPage() {
           affidavitData.category,
           affidavitData.description,
           affidavitData.declaration,
-          affidavitData.issuerAddress,
-          affidavitData.sellerAddress,
-          affidavitData.buyerAddress,
+          zeroAddress, // issuer
+          zeroAddress, // seller
+          zeroAddress, // buyer
           witnessIds,
           ipfsHash,
           { from: await signer.getAddress() },
@@ -425,9 +426,9 @@ export default function AffidavitsPage() {
         affidavitData.category,
         affidavitData.description,
         affidavitData.declaration,
-        affidavitData.issuerAddress,
-        affidavitData.sellerAddress,
-        affidavitData.buyerAddress,
+        zeroAddress, // issuer
+        zeroAddress, // seller
+        zeroAddress, // buyer
         witnessIds,
         ipfsHash,
         { gasLimit },

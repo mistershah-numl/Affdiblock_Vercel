@@ -14,7 +14,7 @@ contract AffidavitRegistry {
         string[] witnessIds;
         string ipfsHash;
         uint256 timestamp;
-        bool isActive;
+        bool onBlockchain;
     }
 
     // Mapping from affidavit ID to Affidavit struct
@@ -71,7 +71,7 @@ contract AffidavitRegistry {
             witnessIds: _witnessIds,
             ipfsHash: _ipfsHash,
             timestamp: block.timestamp,
-            isActive: true
+            onBlockchain: true
         });
         
         // Store affidavit
@@ -102,12 +102,6 @@ contract AffidavitRegistry {
         // Ensure caller is the issuer
         require(affidavits[_affidavitId].issuer == msg.sender, "Only issuer can revoke");
         
-        // Ensure affidavit is active
-        require(affidavits[_affidavitId].isActive, "Affidavit is already revoked");
-        
-        // Revoke affidavit
-        affidavits[_affidavitId].isActive = false;
-        
         // Emit event
         emit AffidavitRevoked(_affidavitId, msg.sender, block.timestamp);
     }
@@ -125,7 +119,7 @@ contract AffidavitRegistry {
      * @return buyer Address of the buyer
      * @return ipfsHash IPFS hash of additional documents
      * @return timestamp Creation timestamp
-     * @return isActive Whether the affidavit is active
+     * @return onBlockchain Whether the affidavit is stored on blockchain
      */
     function getAffidavit(string memory _affidavitId) public view returns (
         string memory affidavitId,
@@ -138,7 +132,7 @@ contract AffidavitRegistry {
         address buyer,
         string memory ipfsHash,
         uint256 timestamp,
-        bool isActive
+        bool onBlockchain
     ) {
         Affidavit storage aff = affidavits[_affidavitId];
         require(bytes(aff.affidavitId).length > 0, "Affidavit does not exist");
@@ -154,7 +148,7 @@ contract AffidavitRegistry {
             aff.buyer,
             aff.ipfsHash,
             aff.timestamp,
-            aff.isActive
+            aff.onBlockchain
         );
     }
 
@@ -186,14 +180,14 @@ contract AffidavitRegistry {
     }
 
     /**
-     * @dev Verify if an affidavit exists and is active
+     * @dev Verify if an affidavit exists and is on blockchain
      * @param _affidavitId ID of the affidavit to verify
      * @return exists Whether the affidavit exists
-     * @return isActive Whether the affidavit is active
+     * @return onBlockchain Whether the affidavit is on blockchain
      */
-    function verifyAffidavit(string memory _affidavitId) public view returns (bool exists, bool isActive) {
+    function verifyAffidavit(string memory _affidavitId) public view returns (bool exists, bool onBlockchain) {
         exists = bytes(affidavits[_affidavitId].affidavitId).length > 0;
-        isActive = exists && affidavits[_affidavitId].isActive;
-        return (exists, isActive);
+        onBlockchain = exists && affidavits[_affidavitId].onBlockchain;
+        return (exists, onBlockchain);
     }
 }

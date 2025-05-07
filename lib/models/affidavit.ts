@@ -8,13 +8,13 @@ export interface IAffidavit extends Document {
   declaration: string
   issuerId: mongoose.Types.ObjectId
   issuerName: string
-  issuerWalletAddress: string
+  issuerIdCardNumber: string
   sellerId?: mongoose.Types.ObjectId
   sellerName?: string
-  sellerWalletAddress?: string
+  sellerIdCardNumber?: string
   buyerId?: mongoose.Types.ObjectId
   buyerName?: string
-  buyerWalletAddress?: string
+  buyerIdCardNumber?: string
   witnesses: Array<{
     contactId: mongoose.Types.ObjectId
     name: string
@@ -48,13 +48,13 @@ const affidavitSchema: Schema<IAffidavit> = new Schema(
     declaration: { type: String, required: true },
     issuerId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     issuerName: { type: String, required: true },
-    issuerWalletAddress: { type: String, required: true },
+    issuerIdCardNumber: { type: String, required: true },
     sellerId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     sellerName: { type: String },
-    sellerWalletAddress: { type: String },
+    sellerIdCardNumber: { type: String },
     buyerId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     buyerName: { type: String },
-    buyerWalletAddress: { type: String },
+    buyerIdCardNumber: { type: String },
     witnesses: [
       {
         contactId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
