@@ -176,6 +176,26 @@ export default function CreateAffidavitDialog({ open, onOpenChange }: CreateAffi
     if (!open) resetForm()
   }, [open])
 
+  useEffect(() => {
+    // Automatically set sellerId or buyerId based on userRole
+    if (userRole === "Seller") {
+      setSellerId(user?._id || "")
+      setBuyerId("")
+      setSellerHasWallet(!!user?.walletAddress)
+      setBuyerHasWallet(null)
+    } else if (userRole === "Buyer") {
+      setBuyerId(user?._id || "")
+      setSellerId("")
+      setBuyerHasWallet(!!user?.walletAddress)
+      setSellerHasWallet(null)
+    } else {
+      setSellerId("")
+      setBuyerId("")
+      setSellerHasWallet(null)
+      setBuyerHasWallet(null)
+    }
+  }, [userRole, user])
+
   const resetForm = () => {
     setTitle("")
     setCategory("")

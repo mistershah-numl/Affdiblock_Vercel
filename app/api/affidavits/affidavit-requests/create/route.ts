@@ -16,8 +16,8 @@ export async function POST(request: NextRequest) {
     const description = formData.get("description") as string
     const declaration = formData.get("declaration") as string
     const userRole = formData.get("userRole") as string
-    const sellerId = formData.get("sellerId") as string | null
-    const buyerId = formData.get("buyerId") as string | null
+    let sellerId = formData.get("sellerId") as string | null
+    let buyerId = formData.get("buyerId") as string | null
     const witnesses = JSON.parse(formData.get("witnesses") as string)
     const details = JSON.parse(formData.get("details") as string)
     const createdBy = formData.get("createdBy") as string
@@ -28,6 +28,14 @@ export async function POST(request: NextRequest) {
     if (!title || !category || !stampValue || !issuerId || !description || !declaration || !userRole || !createdBy || !initiatorIdCardNumber) {
       return NextResponse.json({ success: false, error: "Missing required fields" }, { status: 400 })
     }
+
+    // Set sellerId or buyerId based on userRole
+    if (userRole === "Seller") {
+      sellerId = createdBy
+    } else if (userRole === "Buyer") {
+      buyerId = createdBy
+    }
+
     if (userRole === "Buyer" && !sellerId) {
       return NextResponse.json({ success: false, error: "Seller ID is required for Buyer role" }, { status: 400 })
     }
@@ -35,14 +43,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Buyer ID is required for Seller role" }, { status: 400 })
     }
 
-    // Fetch ID card numbers for issuer, seller, buyer, and witnesses
+    // Fetch user data for createdBy user (initiator)
+    const creator = await User.findById(createdBy)
+    if (!creator) {
+      return NextResponse.json({ success: false, error: "Creator not found" }, { status: 404 })
+    }
+
+    // Fetch ID card numbers and wallet addresses for issuer, seller, buyer, and witnesses
     const issuer = await User.findById(issuerId)
     if (!issuer) {
       return NextResponse.json({ success: false, error: "Issuer not found" }, { status: 404 })
     }
     const issuerIdCardNumber = issuer.idCardNumber
+    const issuerWalletAddress = issuer.walletAddress || "0x0000000000000000000000000000000000000000"
 
     let sellerIdCardNumber = null
+    let sellerWalletAddress = "0x0000000000000000000000000000000000000000"
     let seller = null
     if (sellerId) {
       seller = await User.findById(sellerId)
@@ -50,9 +66,11 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, error: "Seller not found" }, { status: 404 })
       }
       sellerIdCardNumber = seller.idCardNumber
+      sellerWalletAddress = seller.walletAddress || "0x0000000000000000000000000000000000000000"
     }
 
     let buyerIdCardNumber = null
+    let buyerWalletAddress = "0x0000000000000000000000000000000000000000"
     let buyer = null
     if (buyerId) {
       buyer = await User.findById(buyerId)
@@ -60,6 +78,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, error: "Buyer not found" }, { status: 404 })
       }
       buyerIdCardNumber = buyer.idCardNumber
+      buyerWalletAddress = buyer.walletAddress || "0x0000000000000000000000000000000000000000"
     }
 
     const witnessesWithIdCard = await Promise.all(
@@ -82,6 +101,7 @@ export async function POST(request: NextRequest) {
           url: result.url,
           name: file.name,
           type: file.type,
+          ipfsHash: result.ipfsHash || "", // Assuming uploadFile returns ipfsHash
         }
       })
     )
@@ -119,10 +139,27 @@ export async function POST(request: NextRequest) {
 
     await affidavitRequest.save()
 
+    // Prepare data for Pinata (this might be done in a separate step, e.g., after creating the affidavit)
+    const pinataData = {
+      affidavitId: displayId,
+      title,
+      category,
+      description,
+      declaration,
+      issuer: { id: issuerId, walletAddress: issuerWalletAddress },
+      seller: sellerId ? { id: sellerId, walletAddress: sellerWalletAddress } : null,
+      buyer: buyerId ? { id: buyerId, walletAddress: buyerWalletAddress } : null,
+      witnesses: witnessesWithIdCard.map((w: any) => ({ id: w.contactId, walletAddress: w.walletAddress || "0x0000000000000000000000000000000000000000" })),
+      documents: uploadedDocuments,
+      dateRequested: new Date().toISOString(),
+      dateIssued: null,
+    }
+
     return NextResponse.json({
       success: true,
       message: "Affidavit request created successfully",
       affidavitRequestId: affidavitRequest._id,
+      pinataData, // This might be used for Pinata storage elsewhere
     })
   } catch (error) {
     console.error("Error creating affidavit request:", error)
