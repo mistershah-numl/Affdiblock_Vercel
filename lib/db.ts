@@ -1,6 +1,6 @@
 import mongoose from "mongoose"
 
-const MONGODB_URI = process.env.MONGODB_URI || "mongodb://localhost:27017/affidblock"
+const MONGODB_URI: string = process.env.MONGODB_URI || "mongodb://localhost:27017/affidblock"
 
 if (!MONGODB_URI) {
   throw new Error("Please define the MONGODB_URI environment variable")
@@ -8,34 +8,31 @@ if (!MONGODB_URI) {
 
 // Define the shape of the cached connection
 interface MongooseCache {
-  conn: mongoose.Mongoose | null
-  promise: Promise<mongoose.Mongoose> | null
+  conn: typeof mongoose | null
+  promise: Promise<typeof mongoose> | null
 }
 
-// Extend the global object to include mongoose
+// Extend the global object to include mongoose cache
 declare global {
-  namespace NodeJS {
-    interface Global {
-      mongoose: MongooseCache
-    }
-  }
+  // eslint-disable-next-line no-var
+  var mongoose: MongooseCache | undefined
 }
 
 // Initialize the cache
-let cached: MongooseCache = (global as any).mongoose || { conn: null, promise: null }
+let cached: MongooseCache = global.mongoose || { conn: null, promise: null }
 
-if (!(global as any).mongoose) {
-  (global as any).mongoose = cached
+if (!global.mongoose) {
+  global.mongoose = cached
 }
 
-async function dbConnect(): Promise<mongoose.Mongoose> {
+export async function dbConnect(): Promise<typeof mongoose> {
   if (cached.conn) {
     console.log("Using cached MongoDB connection")
     return cached.conn
   }
 
   if (!cached.promise) {
-    const opts = {
+    const opts: mongoose.ConnectOptions = {
       bufferCommands: false,
       maxPoolSize: 10,
       serverSelectionTimeoutMS: 5000,
@@ -64,5 +61,3 @@ async function dbConnect(): Promise<mongoose.Mongoose> {
     throw error
   }
 }
-
-export default dbConnect

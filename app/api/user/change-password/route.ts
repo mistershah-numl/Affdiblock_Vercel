@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { headers } from "next/headers"
-import dbConnect from "@/lib/db"
+import {dbConnect} from "@/lib/db"
 import User from "@/lib/models/user"
 import { verifyToken } from "@/lib/api/auth"
 import bcrypt from "bcryptjs"

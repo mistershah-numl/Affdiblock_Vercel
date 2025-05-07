@@ -23,34 +23,21 @@ import { Label } from "@/components/ui/label"
 import CreateAffidavitDialog from "@/components/create-affidavit-dialog"
 import { useAuth } from "@/lib/auth-context"
 import { toast } from "@/components/ui/use-toast"
-
-interface Affidavit {
-  id: string
-  title: string
-  category: string
-  issuer: string
-  issuerId: string
-  dateRequested: string
-  dateIssued: string | null
-  status: string
-  parties: Array<{ role: string; name: string; idCard: string }>
-  witnesses: Array<{ name: string; idCard: string }>
-  userId: string
-}
+import { ethers } from "ethers"
 
 interface AffidavitRequest {
   _id: string
   displayId: string
   title: string
   category: string
-  issuerId: { _id: string; name: string; area: string; idCardNumber: string }
+  issuerId: { _id: string; name: string; area: string; idCardNumber: string; walletAddress?: string }
   issuerAccepted: boolean | null
   description: string
   declaration: string
   userRole: string
-  sellerId?: { _id: string; name: string; idCardNumber: string }
+  sellerId?: { _id: string; name: string; idCardNumber: string; walletAddress?: string }
   sellerAccepted: boolean | null
-  buyerId?: { _id: string; name: string; idCardNumber: string }
+  buyerId?: { _id: string; name: string; idCardNumber: string; walletAddress?: string }
   buyerAccepted: boolean | null
   witnesses: Array<{ contactId: { _id: string; name: string; idCardNumber: string }; hasAccepted: boolean | null }>
   documents: Array<{ url: string; name: string; type: string }>
@@ -58,6 +45,23 @@ interface AffidavitRequest {
   createdBy: { _id: string; name: string; idCardNumber: string }
   initiatorIdCardNumber: string
   status: string
+  createdAt: string
+}
+
+interface Affidavit {
+  _id: string
+  displayId: string
+  title: string
+  category: string
+  issuerId: { _id: string; name: string; area: string; idCardNumber: string } | string
+  issuerName: string
+  description: string
+  declaration: string
+  dateRequested: string
+  dateIssued: string
+  status: string
+  transactionHash?: string
+  blockNumber?: number
   createdAt: string
 }
 
@@ -74,108 +78,25 @@ export default function AffidavitsPage() {
   const [selectedAffidavitId, setSelectedAffidavitId] = useState<string | null>(null)
   const [selectedAffidavitRequest, setSelectedAffidavitRequest] = useState<AffidavitRequest | null>(null)
   const [affidavitRequests, setAffidavitRequests] = useState<AffidavitRequest[]>([])
+  const [affidavits, setAffidavits] = useState<Affidavit[]>([])
   const [isLoadingRequests, setIsLoadingRequests] = useState(true)
+  const [isLoadingAffidavits, setIsLoadingAffidavits] = useState(true)
+  const [isProcessingBlockchain, setIsProcessingBlockchain] = useState(false)
 
   const userRole = user?.activeRole || "User"
-
-  const affidavits: Affidavit[] = [
-    {
-      id: "AFF-2025-001",
-      title: "Property Transfer Deed",
-      category: "Property",
-      issuer: "Legal Office - Islamabad",
-      issuerId: "issuer1",
-      dateRequested: "2025-03-10",
-      dateIssued: "2025-03-12",
-      status: "Active",
-      parties: [
-        { role: "Buyer", name: "John Doe", idCard: "12345-6789012-3" },
-        { role: "Seller", name: "Jane Smith", idCard: "98765-4321098-7" },
-      ],
-      witnesses: [
-        { name: "Witness 1", idCard: "11111-2222222-3" },
-        { name: "Witness 2", idCard: "44444-5555555-6" },
-      ],
-      userId: user?._id || "user1",
-    },
-    {
-      id: "AFF-2025-002",
-      title: "Vehicle Ownership Transfer",
-      category: "Vehicle",
-      issuer: "Notary Services - Lahore",
-      issuerId: "issuer2",
-      dateRequested: "2025-03-08",
-      dateIssued: null,
-      status: "Pending",
-      parties: [
-        { role: "Buyer", name: "Mike Johnson", idCard: "13579-2468013-5" },
-        { role: "Seller", name: "Sarah Williams", idCard: "24680-1357924-6" },
-      ],
-      witnesses: [{ name: "Witness 3", idCard: "22222-3333333-4" }],
-      userId: "user2",
-    },
-    {
-      id: "AFF-2025-003",
-      title: "Business Partnership Agreement",
-      category: "Business",
-      issuer: "Legal Office - Islamabad",
-      issuerId: "issuer1",
-      dateRequested: "2025-03-05",
-      dateIssued: "2025-03-07",
-      status: "Active",
-      parties: [
-        { role: "Partner 1", name: "Robert Brown", idCard: "54321-6789054-3" },
-        { role: "Partner 2", name: "Lisa Davis", idCard: "65432-1098765-4" },
-      ],
-      witnesses: [
-        { name: "Witness 4", idCard: "33333-4444444-5" },
-        { name: "Witness 5", idCard: "55555-6666666-7" },
-      ],
-      userId: user?._id || "user1",
-    },
-    {
-      id: "AFF-2025-004",
-      title: "Rental Agreement",
-      category: "Property",
-      issuer: "Government Stamp Office - Karachi",
-      issuerId: "issuer3",
-      dateRequested: "2025-03-01",
-      dateIssued: null,
-      status: "Rejected",
-      parties: [
-        { role: "Landlord", name: "David Wilson", idCard: "97531-0246897-5" },
-        { role: "Tenant", name: "Emma Taylor", idCard: "86420-9753186-4" },
-      ],
-      witnesses: [],
-      userId: "user3",
-    },
-    {
-      id: "AFF-2025-005",
-      title: "Motorcycle Sale Agreement",
-      category: "Vehicle",
-      issuer: "Notary Services - Lahore",
-      issuerId: "issuer2",
-      dateRequested: "2025-02-28",
-      dateIssued: "2025-03-02",
-      status: "Revoked",
-      parties: [
-        { role: "Buyer", name: "Alex Martin", idCard: "36925-8147036-9" },
-        { role: "Seller", name: "Olivia Moore", idCard: "25814-7036925-8" },
-      ],
-      witnesses: [{ name: "Witness 6", idCard: "66666-7777777-8" }],
-      userId: user?._id || "user1",
-    },
-  ]
 
   useEffect(() => {
     if (user?._id) {
       fetchAffidavitRequests()
+      fetchAffidavits()
     } else {
       setIsLoadingRequests(false)
+      setIsLoadingAffidavits(false)
       setAffidavitRequests([])
+      setAffidavits([])
       toast({
         title: "Error",
-        description: "User not authenticated. Please log in to view affidavit requests.",
+        description: "User not authenticated. Please log in to view affidavits.",
         variant: "destructive",
       })
     }
@@ -184,9 +105,12 @@ export default function AffidavitsPage() {
   const fetchAffidavitRequests = async () => {
     setIsLoadingRequests(true)
     try {
-      const response = await fetch(`/api/affidavits/affidavit-requests/get?userId=${user?._id}&activeRole=${userRole}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
+      const response = await fetch(
+        `/api/affidavits/affidavit-requests/get?userId=${user?._id}&activeRole=${userRole}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      )
       if (!response.ok) {
         const errorData = await response.json()
         throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
@@ -218,37 +142,78 @@ export default function AffidavitsPage() {
     }
   }
 
+  const fetchAffidavits = async () => {
+    setIsLoadingAffidavits(true)
+    try {
+      const response = await fetch(`/api/affidavits/get-all?userId=${user?._id}&role=${userRole}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
+      }
+      const data = await response.json()
+      if (data.success) {
+        setAffidavits(data.affidavits || [])
+      } else {
+        setAffidavits([])
+        toast({
+          title: "Error",
+          description: data.error || "Failed to fetch affidavits",
+          variant: "destructive",
+        })
+      }
+    } catch (error: any) {
+      console.error("Error fetching affidavits:", {
+        message: error.message,
+        status: error.status,
+      })
+      setAffidavits([])
+      toast({
+        title: "Error",
+        description: error.message || "Failed to fetch affidavits. Please try again later.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoadingAffidavits(false)
+    }
+  }
+
   const getStatusBadge = (status: string) => {
     switch (status.toLowerCase()) {
       case "active":
       case "accepted":
         return <Badge className="bg-green-500 text-white">Accepted</Badge>
       case "pending":
-        return <Badge variant="outline" className="text-orange-500 border-orange-500">Pending</Badge>
+        return (
+          <Badge variant="outline" className="text-orange-500 border-orange-500">
+            Pending
+          </Badge>
+        )
       case "rejected":
         return <Badge variant="destructive">Rejected</Badge>
       case "revoked":
-        return <Badge variant="secondary" className="bg-gray-500 text-white">Revoked</Badge>
+        return (
+          <Badge variant="secondary" className="bg-gray-500 text-white">
+            Revoked
+          </Badge>
+        )
       default:
         return <Badge variant="secondary">{status}</Badge>
     }
   }
 
   const filteredAffidavits = affidavits.filter((affidavit) => {
-    if (userRole === "User" && affidavit.userId !== user?._id) return false
-    if (userRole === "Issuer" && affidavit.issuerId !== user?._id) return false
     const matchesSearch =
-      affidavit.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      affidavit.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      affidavit.issuer.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      affidavit.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      affidavit.parties.some(
-        (party) =>
-          party.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          party.idCard.toLowerCase().includes(searchQuery.toLowerCase()),
-      )
-    const matchesStatus = statusFilter === "all" || affidavit.status.toLowerCase() === statusFilter.toLowerCase()
-    const matchesCategory = categoryFilter === "all" || affidavit.category.toLowerCase() === categoryFilter.toLowerCase()
+      affidavit.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      affidavit.displayId?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      affidavit.issuerName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      affidavit.category?.toLowerCase().includes(searchQuery.toLowerCase())
+
+    const matchesStatus = statusFilter === "all" || affidavit.status?.toLowerCase() === statusFilter.toLowerCase()
+    const matchesCategory =
+      categoryFilter === "all" || affidavit.category?.toLowerCase() === categoryFilter.toLowerCase()
+
     return matchesSearch && matchesStatus && matchesCategory
   })
 
@@ -261,7 +226,10 @@ export default function AffidavitsPage() {
       (request.sellerId?.name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
       (request.buyerId?.name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
       request.witnesses.some((w) => w.contactId.name.toLowerCase().includes(searchQuery.toLowerCase()))
-    const matchesStatus = requestStatusFilter === "all" || request.status.toLowerCase() === requestStatusFilter.toLowerCase()
+
+    const matchesStatus =
+      requestStatusFilter === "all" || request.status.toLowerCase() === requestStatusFilter.toLowerCase()
+
     return matchesSearch && matchesStatus
   })
 
@@ -270,8 +238,38 @@ export default function AffidavitsPage() {
     setIsDeleteDialogOpen(true)
   }
 
-  const handleDeleteConfirm = () => {
-    console.log(`Deleting affidavit ${selectedAffidavitId}`)
+  const handleDeleteConfirm = async () => {
+    if (!selectedAffidavitId) return
+
+    try {
+      const response = await fetch(`/api/affidavits/delete?id=${selectedAffidavitId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        toast({
+          title: "Success",
+          description: "Affidavit deleted successfully",
+        })
+        fetchAffidavits()
+      } else {
+        toast({
+          title: "Error",
+          description: data.error || "Failed to delete affidavit",
+          variant: "destructive",
+        })
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "An error occurred while deleting the affidavit",
+        variant: "destructive",
+      })
+    }
+
     setIsDeleteDialogOpen(false)
     setSelectedAffidavitId(null)
   }
@@ -284,25 +282,251 @@ export default function AffidavitsPage() {
   const handleRespondRequest = async (action: "accept" | "reject") => {
     if (!selectedAffidavitRequest || !user?._id) return
 
-    console.log("Respond Request Payload:", { requestId: selectedAffidavitRequest._id, userId: user._id, activeRole: user.activeRole, action });
-
     try {
-      const response = await fetch("/api/affidavits/affidavit-requests/respond", {
+      const isAccepted = action === "accept"
+
+      // For non-issuer roles or reject action, just update the request status
+      if (user.activeRole !== "Issuer" || !isAccepted || selectedAffidavitRequest.issuerId._id !== user._id) {
+        const response = await fetch("/api/affidavits/affidavit-requests/respond", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            requestId: selectedAffidavitRequest._id,
+            userId: user._id,
+            activeRole: user.activeRole,
+            action,
+          }),
+        })
+
+        const result = await response.json()
+        if (!response.ok || !result.success) {
+          throw new Error(result.error || `Failed to ${action} the request`)
+        }
+
+        toast({
+          title: "Success",
+          description: `Successfully ${action}ed the affidavit request`,
+          variant: "default",
+        })
+
+        // Update local state
+        setAffidavitRequests((prev) =>
+          prev.map((req) =>
+            req._id === selectedAffidavitRequest._id ? { ...req, status: isAccepted ? "accepted" : "rejected" } : req,
+          ),
+        )
+
+        await Promise.all([fetchAffidavitRequests(), fetchAffidavits()])
+        setIsViewRequestDialogOpen(false)
+        return
+      }
+
+      // For issuer accepting, we need to handle the blockchain transaction
+      setIsProcessingBlockchain(true)
+
+      // Step 1: Create the affidavit in the database (without blockchain details)
+      toast({
+        title: "Processing",
+        description: "Creating affidavit record...",
+        duration: 3000,
+      })
+
+      const initialResponse = await fetch("/api/affidavits/affidavit-requests/respond", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ requestId: selectedAffidavitRequest._id, userId: user._id, activeRole: user.activeRole, action }),
+        body: JSON.stringify({
+          requestId: selectedAffidavitRequest._id,
+          userId: user._id,
+          activeRole: user.activeRole,
+          action,
+        }),
       })
-      const result = await response.json()
-      if (result.success) {
-        toast({ title: "Success", description: `Successfully ${action}ed the affidavit request`, variant: "default" })
-        fetchAffidavitRequests() // Refresh the table with the latest data
-        setIsViewRequestDialogOpen(false)
-      } else {
-        toast({ title: "Error", description: result.error || `Failed to ${action} the request`, variant: "destructive" })
+
+      const initialResult = await initialResponse.json()
+      if (!initialResponse.ok || !initialResult.success) {
+        throw new Error(initialResult.error || `Failed to ${action} the request`)
       }
-    } catch (error) {
+
+      const affidavitData = initialResult.affidavitData
+      if (!affidavitData) {
+        throw new Error("Affidavit data not returned from API")
+      }
+
+      // Step 2: Deploy to blockchain
+      toast({
+        title: "Processing",
+        description: "Deploying to blockchain. Please confirm the transaction in MetaMask...",
+        duration: 5000,
+      })
+
+      if (!window.ethereum) {
+        throw new Error("MetaMask is not installed or not running in a browser environment")
+      }
+
+      const provider = new ethers.BrowserProvider(window.ethereum)
+      await window.ethereum.request({ method: "eth_requestAccounts" })
+      const signer = await provider.getSigner()
+      const contractAddress = "0x2444c02943aA4f09D2C63D607f82668413F713d6"
+      const contract = new ethers.Contract(
+        contractAddress,
+        [
+          "function createAffidavit(string memory _affidavitId, string memory _title, string memory _category, string memory _description, string memory _declaration, address _issuer, address _seller, address _buyer, string[] memory _witnessIds, string memory _ipfsHash) public",
+        ],
+        signer,
+      )
+
+      console.log("Blockchain Deployment Data:", {
+        affidavitId: affidavitData.affidavitId,
+        title: affidavitData.title,
+        category: affidavitData.category,
+        description: affidavitData.description,
+        declaration: affidavitData.declaration,
+        issuerAddress: affidavitData.issuerAddress,
+        sellerAddress: affidavitData.sellerAddress,
+        buyerAddress: affidavitData.buyerAddress,
+        witnessIds: affidavitData.witnessIds,
+        ipfsHash: affidavitData.ipfsHash,
+      })
+
+      const witnessIds =
+        affidavitData.witnessIds.length > 0 ? affidavitData.witnessIds : ["0x0000000000000000000000000000000000000000"]
+      const ipfsHash = affidavitData.ipfsHash || ""
+
+      const gasEstimate = await contract.createAffidavit
+        .estimateGas(
+          affidavitData.affidavitId,
+          affidavitData.title,
+          affidavitData.category,
+          affidavitData.description,
+          affidavitData.declaration,
+          affidavitData.issuerAddress,
+          affidavitData.sellerAddress,
+          affidavitData.buyerAddress,
+          witnessIds,
+          ipfsHash,
+          { from: await signer.getAddress() },
+        )
+        .catch((err: any) => {
+          console.error("Gas estimation failed:", err)
+          throw new Error("Gas estimation failed: " + err.message)
+        })
+
+      const gasLimit = Math.floor(Number(gasEstimate) * 1.2)
+
+      toast({
+        title: "Processing",
+        description: "Sending transaction to blockchain...",
+        duration: 5000,
+      })
+
+      const tx = await contract.createAffidavit(
+        affidavitData.affidavitId,
+        affidavitData.title,
+        affidavitData.category,
+        affidavitData.description,
+        affidavitData.declaration,
+        affidavitData.issuerAddress,
+        affidavitData.sellerAddress,
+        affidavitData.buyerAddress,
+        witnessIds,
+        ipfsHash,
+        { gasLimit },
+      )
+
+      console.log("Transaction sent, hash:", tx.hash)
+
+      toast({
+        title: "Processing",
+        description: "Transaction sent. Waiting for confirmation...",
+        duration: 10000,
+      })
+
+      // Step 3: Wait for transaction confirmation
+      const receipt = await tx.wait(1)
+      console.log("Transaction confirmed:", receipt)
+
+      if (!receipt || !receipt.hash) {
+        throw new Error("Failed to get transaction receipt")
+      }
+
+      const transactionHash = receipt.hash
+      const blockNumber = Number(receipt.blockNumber)
+
+      // Step 4: Update the affidavit with blockchain details
+      toast({
+        title: "Processing",
+        description: "Updating affidavit with blockchain details...",
+        duration: 3000,
+      })
+
+      const updateResponse = await fetch("/api/affidavits/affidavit-requests/respond", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          requestId: selectedAffidavitRequest._id,
+          userId: user._id,
+          activeRole: user.activeRole,
+          action,
+          transactionHash,
+          blockNumber,
+          affidavitId: affidavitData.affidavitId,
+        }),
+      })
+
+      const updateResult = await updateResponse.json()
+      if (!updateResponse.ok || !updateResult.success) {
+        console.error("Failed to update blockchain details:", updateResult)
+        throw new Error("Transaction confirmed, but failed to update affidavit with blockchain details")
+      }
+
+      // Update local state
+      setAffidavitRequests((prev) =>
+        prev.map((req) =>
+          req._id === selectedAffidavitRequest._id ? { ...req, status: "accepted", issuerAccepted: true } : req,
+        ),
+      )
+
+      toast({
+        title: "Success",
+        description: "Affidavit accepted and deployed to blockchain successfully",
+        variant: "default",
+      })
+
+      await Promise.all([fetchAffidavitRequests(), fetchAffidavits()])
+      setIsViewRequestDialogOpen(false)
+    } catch (error: any) {
       console.error(`Error ${action}ing request:`, error)
-      toast({ title: "Error", description: `Unexpected error while ${action}ing the request`, variant: "destructive" })
+      toast({
+        title: "Error",
+        description: `Transaction failed: ${error.message || "Unknown error"}`,
+        variant: "destructive",
+      })
+    } finally {
+      setIsProcessingBlockchain(false)
+    }
+  }
+
+  const handleViewProfile = async (idCard: string) => {
+    try {
+      const response = await fetch(`/api/user?filter=idCardNumber:${idCard}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await response.json()
+      if (data.success && data.users.length > 0) {
+        router.push(`/dashboard/users/${data.users[0]._id}`)
+      } else {
+        toast({
+          title: "Error",
+          description: "User not found",
+          variant: "destructive",
+        })
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: "Failed to fetch user profile",
+        variant: "destructive",
+      })
     }
   }
 
@@ -323,7 +547,8 @@ export default function AffidavitsPage() {
   const allNonIssuersAccepted = (request: AffidavitRequest) => {
     const sellerAccepted = request.sellerId ? request.sellerAccepted === true : true
     const buyerAccepted = request.buyerId ? request.buyerAccepted === true : true
-    const witnessesAccepted = request.witnesses.length > 0 ? request.witnesses.every((w) => w.hasAccepted === true) : true
+    const witnessesAccepted =
+      request.witnesses.length > 0 ? request.witnesses.every((w) => w.hasAccepted === true) : true
     return sellerAccepted && buyerAccepted && witnessesAccepted
   }
 
@@ -339,7 +564,12 @@ export default function AffidavitsPage() {
         <div className="flex flex-col md:flex-row gap-4 mt-4">
           <div className="relative flex-1">
             <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
-            <Input placeholder="Search requests..." className="pl-8" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+            <Input
+              placeholder="Search requests..."
+              className="pl-8"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
           </div>
           <div className="flex items-center gap-2">
             <Filter className="h-4 w-4 text-gray-400" />
@@ -383,11 +613,21 @@ export default function AffidavitsPage() {
                   <TableCell className="font-medium">{request.displayId}</TableCell>
                   <TableCell>{request.title}</TableCell>
                   <TableCell>{request.category}</TableCell>
-                  <TableCell>{request.issuerId.name}</TableCell>
+                  <TableCell
+                    className="cursor-pointer"
+                    onClick={() => handleViewProfile(request.issuerId.idCardNumber)}
+                  >
+                    {request.issuerId.name}
+                  </TableCell>
                   <TableCell>{new Date(request.createdAt).toLocaleDateString()}</TableCell>
                   <TableCell>{getStatusBadge(request.status)}</TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => handleViewRequest(request)}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 p-0"
+                      onClick={() => handleViewRequest(request)}
+                    >
                       <Eye className="h-4 w-4" />
                       <span className="sr-only">Show</span>
                     </Button>
@@ -410,13 +650,150 @@ export default function AffidavitsPage() {
     </Card>
   )
 
+  const renderAffidavitsTable = () => (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle>All Affidavits</CardTitle>
+        <CardDescription>
+          {userRole === "Admin"
+            ? "View and manage all affidavits"
+            : userRole === "Issuer"
+              ? "Manage your issued affidavits"
+              : "View your affidavits"}
+        </CardDescription>
+        <div className="flex flex-col md:flex-row gap-4 mt-4">
+          <div className="relative flex-1">
+            <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
+            <Input
+              placeholder="Search affidavits..."
+              className="pl-8"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
+          <div className="flex flex-col sm:flex-row items-center gap-2">
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <Filter className="h-4 w-4 text-gray-400" />
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Filter by status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Statuses</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="rejected">Rejected</SelectItem>
+                  <SelectItem value="revoked">Revoked</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Filter by category" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Categories</SelectItem>
+                <SelectItem value="property">Property</SelectItem>
+                <SelectItem value="vehicle">Vehicle</SelectItem>
+                <SelectItem value="business">Business</SelectItem>
+                <SelectItem value="personal">Personal</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>ID</TableHead>
+              <TableHead>Title</TableHead>
+              <TableHead>Category</TableHead>
+              <TableHead>Issuer</TableHead>
+              <TableHead>Date Issued</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {isLoadingAffidavits ? (
+              <TableRow>
+                <TableCell colSpan={7} className="text-center py-8">
+                  Loading affidavits...
+                </TableCell>
+              </TableRow>
+            ) : filteredAffidavits.length > 0 ? (
+              filteredAffidavits.map((affidavit) => (
+                <TableRow key={affidavit._id}>
+                  <TableCell className="font-medium">{affidavit.displayId}</TableCell>
+                  <TableCell>{affidavit.title}</TableCell>
+                  <TableCell>{affidavit.category}</TableCell>
+                  <TableCell>{affidavit.issuerName}</TableCell>
+                  <TableCell>{new Date(affidavit.dateIssued || affidavit.createdAt).toLocaleDateString()}</TableCell>
+                  <TableCell>{getStatusBadge(affidavit.status)}</TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-2">
+                      <Button asChild variant="ghost" size="sm" className="h-8 w-8 p-0">
+                        <Link href={`/affidavit/${affidavit.displayId}`}>
+                          <Eye className="h-4 w-4" />
+                          <span className="sr-only">View</span>
+                        </Link>
+                      </Button>
+                      {(userRole === "Admin" ||
+                        (userRole === "Issuer" &&
+                          (typeof affidavit.issuerId === "object"
+                            ? affidavit.issuerId._id === user?._id
+                            : affidavit.issuerId === user?._id))) && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 w-8 p-0"
+                          onClick={() => router.push(`/affidavit/${affidavit.displayId}/edit`)}
+                        >
+                          <Edit className="h-4 w-4" />
+                          <span className="sr-only">Edit</span>
+                        </Button>
+                      )}
+                      {userRole === "Admin" && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 w-8 p-0 text-red-500 hover:text-red-600 hover:bg-red-50"
+                          onClick={() => handleDeleteClick(affidavit.displayId)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          <span className="sr-only">Delete</span>
+                        </Button>
+                      )}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))
+            ) : (
+              <TableRow>
+                <TableCell colSpan={7} className="text-center py-6">
+                  <div className="flex flex-col items-center justify-center text-gray-500">
+                    <AlertCircle className="h-10 w-10 mb-2" />
+                    <p>No affidavits found</p>
+                  </div>
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+  )
+
   return (
     <div className="flex flex-col gap-6 p-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Affidavits</h1>
           <p className="text-gray-500">
-            {userRole === "Issuer" ? "View and manage affidavit requests" : "Manage and view all affidavits and requests"}
+            {userRole === "Issuer"
+              ? "View and manage affidavit requests"
+              : "Manage and view all affidavits and requests"}
           </p>
         </div>
         <Button onClick={() => setIsCreateDialogOpen(true)} className="flex items-center gap-2">
@@ -434,119 +811,9 @@ export default function AffidavitsPage() {
             <TabsTrigger value="affidavit-requests">Affidavit Requests</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="affidavits">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle>All Affidavits</CardTitle>
-                <CardDescription>
-                  {userRole === "Admin"
-                    ? "View and manage all affidavits"
-                    : userRole === "Issuer"
-                    ? "Manage your issued affidavits"
-                    : "View your affidavits"}
-                </CardDescription>
-                <div className="flex flex-col md:flex-row gap-4 mt-4">
-                  <div className="relative flex-1">
-                    <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
-                    <Input placeholder="Search affidavits..." className="pl-8" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
-                  </div>
-                  <div className="flex flex-col sm:flex-row items-center gap-2">
-                    <div className="flex items-center gap-2 w-full sm:w-auto">
-                      <Filter className="h-4 w-4 text-gray-400" />
-                      <Select value={statusFilter} onValueChange={setStatusFilter}>
-                        <SelectTrigger className="w-[180px]">
-                          <SelectValue placeholder="Filter by status" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All Statuses</SelectItem>
-                          <SelectItem value="active">Active</SelectItem>
-                          <SelectItem value="pending">Pending</SelectItem>
-                          <SelectItem value="rejected">Rejected</SelectItem>
-                          <SelectItem value="revoked">Revoked</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                      <SelectTrigger className="w-[180px]">
-                        <SelectValue placeholder="Filter by category" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Categories</SelectItem>
-                        <SelectItem value="property">Property</SelectItem>
-                        <SelectItem value="vehicle">Vehicle</SelectItem>
-                        <SelectItem value="business">Business</SelectItem>
-                        <SelectItem value="personal">Personal</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>ID</TableHead>
-                      <TableHead>Title</TableHead>
-                      <TableHead>Category</TableHead>
-                      <TableHead>Issuer</TableHead>
-                      <TableHead>Date Requested</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredAffidavits.length > 0 ? (
-                      filteredAffidavits.map((affidavit) => (
-                        <TableRow key={affidavit.id}>
-                          <TableCell className="font-medium">{affidavit.id}</TableCell>
-                          <TableCell>{affidavit.title}</TableCell>
-                          <TableCell>{affidavit.category}</TableCell>
-                          <TableCell>{affidavit.issuer}</TableCell>
-                          <TableCell>{affidavit.dateRequested}</TableCell>
-                          <TableCell>{getStatusBadge(affidavit.status)}</TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex justify-end gap-2">
-                              <Button asChild variant="ghost" size="sm" className="h-8 w-8 p-0">
-                                <Link href={`/affidavit/${affidavit.id}`}>
-                                  <Eye className="h-4 w-4" />
-                                  <span className="sr-only">View</span>
-                                </Link>
-                              </Button>
-                              {(userRole === "Admin" || (userRole === "Issuer" && affidavit.issuerId === user?._id)) && (
-                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => router.push(`/affidavit/${affidavit.id}/edit`)}>
-                                  <Edit className="h-4 w-4" />
-                                  <span className="sr-only">Edit</span>
-                                </Button>
-                              )}
-                              {userRole === "Admin" && (
-                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-500 hover:text-red-600 hover:bg-red-50" onClick={() => handleDeleteClick(affidavit.id)}>
-                                  <Trash2 className="h-4 w-4" />
-                                  <span className="sr-only">Delete</span>
-                                </Button>
-                              )}
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    ) : (
-                      <TableRow>
-                        <TableCell colSpan={7} className="text-center py-6">
-                          <div className="flex flex-col items-center justify-center text-gray-500">
-                            <AlertCircle className="h-10 w-10 mb-2" />
-                            <p>No affidavits found</p>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          </TabsContent>
+          <TabsContent value="affidavits">{renderAffidavitsTable()}</TabsContent>
 
-          <TabsContent value="affidavit-requests">
-            {renderAffidavitRequestsTable()}
-          </TabsContent>
+          <TabsContent value="affidavit-requests">{renderAffidavitRequestsTable()}</TabsContent>
         </Tabs>
       )}
 
@@ -556,11 +823,17 @@ export default function AffidavitsPage() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Delete Affidavit</DialogTitle>
-            <DialogDescription>Are you sure you want to delete this affidavit? This action cannot be undone.</DialogDescription>
+            <DialogDescription>
+              Are you sure you want to delete this affidavit? This action cannot be undone.
+            </DialogDescription>
           </DialogHeader>
           <DialogFooter className="flex flex-col-reverse sm:flex-row sm:justify-center sm:space-x-2">
-            <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>Cancel</Button>
-            <Button variant="destructive" onClick={handleDeleteConfirm}>Delete</Button>
+            <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteConfirm}>
+              Delete
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -569,7 +842,9 @@ export default function AffidavitsPage() {
         <DialogContent className="sm:max-w-[600px] max-h-[90vh] flex flex-col bg-gradient-to-br from-blue-50 to-indigo-100 p-6 rounded-lg shadow-lg">
           <DialogHeader>
             <DialogTitle className="text-2xl font-bold text-indigo-800">Affidavit Request Details</DialogTitle>
-            <DialogDescription className="text-indigo-600">Review the details, documents, and acceptance status.</DialogDescription>
+            <DialogDescription className="text-indigo-600">
+              Review the details, documents, and acceptance status.
+            </DialogDescription>
           </DialogHeader>
           {selectedAffidavitRequest && (
             <div className="space-y-6 flex-1 overflow-y-auto">
@@ -604,14 +879,23 @@ export default function AffidavitsPage() {
                 <div className="space-y-3">
                   <div>
                     <Label className="text-indigo-600 font-medium">Initiator</Label>
-                    <p className="text-sm text-gray-700">
-                      {selectedAffidavitRequest.createdBy.name} (ID Card: {selectedAffidavitRequest.initiatorIdCardNumber})
+                    <p
+                      className="text-sm text-gray-700 cursor-pointer"
+                      onClick={() => handleViewProfile(selectedAffidavitRequest.initiatorIdCardNumber)}
+                    >
+                      {selectedAffidavitRequest.createdBy.name} (ID Card:{" "}
+                      {selectedAffidavitRequest.initiatorIdCardNumber})
                     </p>
                   </div>
                   <div>
                     <Label className="text-indigo-600 font-medium">Issuer</Label>
-                    <p className="text-sm text-gray-700">
-                      {selectedAffidavitRequest.issuerId.name} (ID Card: {selectedAffidavitRequest.issuerId.idCardNumber}, Area: {selectedAffidavitRequest.issuerId.area || "N/A"})
+                    <p
+                      className="text-sm text-gray-700 cursor-pointer"
+                      onClick={() => handleViewProfile(selectedAffidavitRequest.issuerId.idCardNumber)}
+                    >
+                      {selectedAffidavitRequest.issuerId.name} (ID Card:{" "}
+                      {selectedAffidavitRequest.issuerId.idCardNumber}, Area:{" "}
+                      {selectedAffidavitRequest.issuerId.area || "N/A"})
                       {selectedAffidavitRequest.issuerAccepted === true ? (
                         <CheckCircle className="inline-block h-4 w-4 ml-2 text-green-500" />
                       ) : selectedAffidavitRequest.issuerAccepted === false ? (
@@ -624,8 +908,12 @@ export default function AffidavitsPage() {
                   {selectedAffidavitRequest.sellerId && (
                     <div>
                       <Label className="text-indigo-600 font-medium">Seller</Label>
-                      <p className="text-sm text-gray-700">
-                        {selectedAffidavitRequest.sellerId.name} (ID Card: {selectedAffidavitRequest.sellerId.idCardNumber})
+                      <p
+                        className="text-sm text-gray-700 cursor-pointer"
+                        onClick={() => handleViewProfile(selectedAffidavitRequest.sellerId.idCardNumber)}
+                      >
+                        {selectedAffidavitRequest.sellerId.name} (ID Card:{" "}
+                        {selectedAffidavitRequest.sellerId.idCardNumber})
                         {selectedAffidavitRequest.sellerAccepted === true ? (
                           <CheckCircle className="inline-block h-4 w-4 ml-2 text-green-500" />
                         ) : selectedAffidavitRequest.sellerAccepted === false ? (
@@ -639,8 +927,12 @@ export default function AffidavitsPage() {
                   {selectedAffidavitRequest.buyerId && (
                     <div>
                       <Label className="text-indigo-600 font-medium">Buyer</Label>
-                      <p className="text-sm text-gray-700">
-                        {selectedAffidavitRequest.buyerId.name} (ID Card: {selectedAffidavitRequest.buyerId.idCardNumber})
+                      <p
+                        className="text-sm text-gray-700 cursor-pointer"
+                        onClick={() => handleViewProfile(selectedAffidavitRequest.buyerId.idCardNumber)}
+                      >
+                        {selectedAffidavitRequest.buyerId.name} (ID Card:{" "}
+                        {selectedAffidavitRequest.buyerId.idCardNumber})
                         {selectedAffidavitRequest.buyerAccepted === true ? (
                           <CheckCircle className="inline-block h-4 w-4 ml-2 text-green-500" />
                         ) : selectedAffidavitRequest.buyerAccepted === false ? (
@@ -655,7 +947,11 @@ export default function AffidavitsPage() {
                     <div>
                       <Label className="text-indigo-600 font-medium">Witnesses</Label>
                       {selectedAffidavitRequest.witnesses.map((witness, index) => (
-                        <p key={index} className="text-sm text-gray-700">
+                        <p
+                          key={index}
+                          className="text-sm text-gray-700 cursor-pointer"
+                          onClick={() => handleViewProfile(witness.contactId.idCardNumber)}
+                        >
                           {witness.contactId.name} (ID Card: {witness.contactId.idCardNumber})
                           {witness.hasAccepted === true ? (
                             <CheckCircle className="inline-block h-4 w-4 ml-2 text-green-500" />
@@ -680,7 +976,7 @@ export default function AffidavitsPage() {
                         {isImageFile(doc.type) ? (
                           <>
                             <img
-                              src={doc.url}
+                              src={doc.url || "/placeholder.svg"}
                               alt={doc.name}
                               className="max-w-full h-auto rounded-md shadow-sm"
                               style={{ maxHeight: "200px", objectFit: "contain" }}
@@ -719,23 +1015,53 @@ export default function AffidavitsPage() {
             </div>
           )}
           <DialogFooter className="flex flex-col sm:flex-row sm:justify-center sm:space-x-2 mt-4">
-            <Button variant="outline" onClick={() => setIsViewRequestDialogOpen(false)}>Close</Button>
-            {selectedAffidavitRequest && user && !hasUserResponded(selectedAffidavitRequest) && !isInitiator(selectedAffidavitRequest) && (
-              userRole === "Issuer" && selectedAffidavitRequest.issuerId._id === user._id ? (
+            <Button variant="outline" onClick={() => setIsViewRequestDialogOpen(false)}>
+              Close
+            </Button>
+            {selectedAffidavitRequest &&
+              user &&
+              !hasUserResponded(selectedAffidavitRequest) &&
+              !isInitiator(selectedAffidavitRequest) &&
+              !isProcessingBlockchain &&
+              (userRole === "Issuer" && selectedAffidavitRequest.issuerId._id === user._id ? (
                 allNonIssuersAccepted(selectedAffidavitRequest) ? (
                   <>
-                    <Button onClick={() => handleRespondRequest("accept")} className="bg-green-500 hover:bg-green-600 text-white">Accept</Button>
-                    <Button onClick={() => handleRespondRequest("reject")} className="bg-red-500 hover:bg-red-600 text-white">Reject</Button>
+                    <Button
+                      onClick={() => handleRespondRequest("accept")}
+                      className="bg-green-500 hover:bg-green-600 text-white"
+                    >
+                      Accept
+                    </Button>
+                    <Button
+                      onClick={() => handleRespondRequest("reject")}
+                      className="bg-red-500 hover:bg-red-600 text-white"
+                    >
+                      Reject
+                    </Button>
                   </>
                 ) : (
                   <p className="text-red-500 text-sm mt-2">You can only accept if all parties accept this affidavit.</p>
                 )
               ) : (
                 <>
-                  <Button onClick={() => handleRespondRequest("accept")} className="bg-green-500 hover:bg-green-600 text-white">Accept</Button>
-                  <Button onClick={() => handleRespondRequest("reject")} className="bg-red-500 hover:bg-red-600 text-white">Reject</Button>
+                  <Button
+                    onClick={() => handleRespondRequest("accept")}
+                    className="bg-green-500 hover:bg-green-600 text-white"
+                    disabled={isProcessingBlockchain}
+                  >
+                    Accept
+                  </Button>
+                  <Button
+                    onClick={() => handleRespondRequest("reject")}
+                    className="bg-red-500 hover:bg-red-600 text-white"
+                    disabled={isProcessingBlockchain}
+                  >
+                    Reject
+                  </Button>
                 </>
-              )
+              ))}
+            {isProcessingBlockchain && (
+              <p className="text-blue-500 text-sm mt-2">Processing blockchain transaction. Please wait...</p>
             )}
           </DialogFooter>
         </DialogContent>

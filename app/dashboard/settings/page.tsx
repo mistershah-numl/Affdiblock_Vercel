@@ -12,7 +12,6 @@ import { Loader2, Mail, Globe, Wallet, Save } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { toast } from "@/components/ui/use-toast"
 import { getWalletBalance, getNetworkName, getConnectedMetaMaskWallet } from "@/lib/blockchain"
-import { ethers } from "ethers"
 
 interface AccountSettings {
   email: string
@@ -92,9 +91,16 @@ export default function SettingsPage() {
       } else {
         setBlockchainSettings((prev) => ({ ...prev, balance: "0" }))
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error checking wallet match:", error)
       setIsWalletMatched(false)
+      if (error.message.includes("MetaMask is not installed")) {
+        toast({
+          title: "Error",
+          description: "MetaMask is not installed. Please install MetaMask to manage your wallet.",
+          variant: "destructive",
+        })
+      }
     }
   }
 
@@ -113,11 +119,11 @@ export default function SettingsPage() {
     try {
       const balance = await getWalletBalance(walletAddress)
       setBlockchainSettings((prev) => ({ ...prev, balance }))
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error fetching balance:", error)
       toast({
         title: "Error",
-        description: "Failed to fetch wallet balance",
+        description: error.message || "Failed to fetch wallet balance",
         variant: "destructive",
       })
     }

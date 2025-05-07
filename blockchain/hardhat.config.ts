@@ -1,17 +1,29 @@
-import { HardhatUserConfig } from "hardhat/config";
-import "@nomicfoundation/hardhat-toolbox";
+require("@nomicfoundation/hardhat-toolbox")
 
-const config: HardhatUserConfig = {
-  solidity: "0.8.20",
+/** @type import('hardhat/config').HardhatUserConfig */
+module.exports = {
+  solidity: "0.8.19",
   networks: {
-    ganache: {
-      url: "http://127.0.0.1:7545", // Ganache default RPC URL
-      chainId: 1337, // Ganache default chain ID
+    hardhat: {
+      chainId: 1337,
+    },
+    localhost: {
+      url: "http://127.0.0.1:7545", // Match Ganache's port
       accounts: {
-        mnemonic: "lady spring actual able smoke wave palace drink citizen timber then barrel", // Replace with your Ganache mnemonic
+        mnemonic: "lady spring actual able smoke wave palace drink citizen timber then barrel",
+      },
+    },
+    ganache: {
+      url: "http://127.0.0.1:7545",
+      accounts: {
+        mnemonic: "lady spring actual able smoke wave palace drink citizen timber then barrel",
       },
     },
   },
-};
-
-export default config;
+  paths: {
+    artifacts: "./artifacts",
+    cache: "./cache",
+    sources: "./contracts",
+    tests: "./test",
+  },
+}

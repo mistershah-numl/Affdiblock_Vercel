@@ -9,6 +9,7 @@ import type {
   Result,
   Interface,
   EventFragment,
+  AddressLike,
   ContractRunner,
   ContractMethod,
   Listener,
@@ -23,121 +24,232 @@ import type {
 } from "./common";
 
 export declare namespace Affidavit {
+  export type PartyStruct = {
+    role: string;
+    name: string;
+    idCardNumber: string;
+    userAddress: AddressLike;
+  };
+
+  export type PartyStructOutput = [
+    role: string,
+    name: string,
+    idCardNumber: string,
+    userAddress: string
+  ] & { role: string; name: string; idCardNumber: string; userAddress: string };
+
+  export type WitnessStruct = {
+    name: string;
+    idCardNumber: string;
+    userAddress: AddressLike;
+  };
+
+  export type WitnessStructOutput = [
+    name: string,
+    idCardNumber: string,
+    userAddress: string
+  ] & { name: string; idCardNumber: string; userAddress: string };
+
   export type AffidavitDataStruct = {
-    displayId: string;
+    affidavitId: string;
     title: string;
     category: string;
-    issuerId: string;
+    issuerName: string;
     issuerIdCardNumber: string;
-    partyIds: string[];
-    partyIdCardNumbers: string[];
-    witnessNames: string[];
-    witnessIdCardNumbers: string[];
+    dateRequested: BigNumberish;
+    dateIssued: BigNumberish;
     status: string;
-    timestamp: BigNumberish;
+    parties: Affidavit.PartyStruct[];
+    witnesses: Affidavit.WitnessStruct[];
+    documentHashes: string[];
+    description: string;
+    declaration: string;
   };
 
   export type AffidavitDataStructOutput = [
-    displayId: string,
+    affidavitId: string,
     title: string,
     category: string,
-    issuerId: string,
+    issuerName: string,
     issuerIdCardNumber: string,
-    partyIds: string[],
-    partyIdCardNumbers: string[],
-    witnessNames: string[],
-    witnessIdCardNumbers: string[],
+    dateRequested: bigint,
+    dateIssued: bigint,
     status: string,
-    timestamp: bigint
+    parties: Affidavit.PartyStructOutput[],
+    witnesses: Affidavit.WitnessStructOutput[],
+    documentHashes: string[],
+    description: string,
+    declaration: string
   ] & {
-    displayId: string;
+    affidavitId: string;
     title: string;
     category: string;
-    issuerId: string;
+    issuerName: string;
     issuerIdCardNumber: string;
-    partyIds: string[];
-    partyIdCardNumbers: string[];
-    witnessNames: string[];
-    witnessIdCardNumbers: string[];
+    dateRequested: bigint;
+    dateIssued: bigint;
     status: string;
-    timestamp: bigint;
+    parties: Affidavit.PartyStructOutput[];
+    witnesses: Affidavit.WitnessStructOutput[];
+    documentHashes: string[];
+    description: string;
+    declaration: string;
   };
 }
 
 export interface AffidavitInterface extends Interface {
   getFunction(
     nameOrSignature:
-      | "affidavitExists"
-      | "affidavits"
-      | "getAffidavit"
-      | "storeAffidavit"
-      | "updateAffidavitStatus"
+      | "affidavitId"
+      | "category"
+      | "createAffidavit"
+      | "createdAt"
+      | "dateIssued"
+      | "dateRequested"
+      | "declaration"
+      | "description"
+      | "documentHashes"
+      | "getAffidavitBasicInfo"
+      | "getAffidavitDetails"
+      | "getAffidavitParticipants"
+      | "issuer"
+      | "issuerIdCardNumber"
+      | "issuerName"
+      | "parties"
+      | "status"
+      | "title"
+      | "witnesses"
   ): FunctionFragment;
 
-  getEvent(nameOrSignatureOrTopic: "AffidavitStored"): EventFragment;
+  getEvent(nameOrSignatureOrTopic: "AffidavitCreated"): EventFragment;
 
   encodeFunctionData(
-    functionFragment: "affidavitExists",
-    values: [string]
+    functionFragment: "affidavitId",
+    values?: undefined
   ): string;
-  encodeFunctionData(functionFragment: "affidavits", values: [string]): string;
+  encodeFunctionData(functionFragment: "category", values?: undefined): string;
   encodeFunctionData(
-    functionFragment: "getAffidavit",
-    values: [string]
+    functionFragment: "createAffidavit",
+    values: [Affidavit.AffidavitDataStruct]
   ): string;
+  encodeFunctionData(functionFragment: "createdAt", values?: undefined): string;
   encodeFunctionData(
-    functionFragment: "storeAffidavit",
-    values: [
-      string,
-      string,
-      string,
-      string,
-      string,
-      string[],
-      string[],
-      string[],
-      string[],
-      string
-    ]
+    functionFragment: "dateIssued",
+    values?: undefined
   ): string;
   encodeFunctionData(
-    functionFragment: "updateAffidavitStatus",
-    values: [string, string]
+    functionFragment: "dateRequested",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "declaration",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "description",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "documentHashes",
+    values: [BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "getAffidavitBasicInfo",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "getAffidavitDetails",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "getAffidavitParticipants",
+    values?: undefined
+  ): string;
+  encodeFunctionData(functionFragment: "issuer", values?: undefined): string;
+  encodeFunctionData(
+    functionFragment: "issuerIdCardNumber",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "issuerName",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "parties",
+    values: [BigNumberish]
+  ): string;
+  encodeFunctionData(functionFragment: "status", values?: undefined): string;
+  encodeFunctionData(functionFragment: "title", values?: undefined): string;
+  encodeFunctionData(
+    functionFragment: "witnesses",
+    values: [BigNumberish]
   ): string;
 
   decodeFunctionResult(
-    functionFragment: "affidavitExists",
+    functionFragment: "affidavitId",
     data: BytesLike
   ): Result;
-  decodeFunctionResult(functionFragment: "affidavits", data: BytesLike): Result;
+  decodeFunctionResult(functionFragment: "category", data: BytesLike): Result;
   decodeFunctionResult(
-    functionFragment: "getAffidavit",
+    functionFragment: "createAffidavit",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(functionFragment: "createdAt", data: BytesLike): Result;
+  decodeFunctionResult(functionFragment: "dateIssued", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "dateRequested",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
-    functionFragment: "storeAffidavit",
+    functionFragment: "declaration",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
-    functionFragment: "updateAffidavitStatus",
+    functionFragment: "description",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(
+    functionFragment: "documentHashes",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "getAffidavitBasicInfo",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "getAffidavitDetails",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "getAffidavitParticipants",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(functionFragment: "issuer", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "issuerIdCardNumber",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(functionFragment: "issuerName", data: BytesLike): Result;
+  decodeFunctionResult(functionFragment: "parties", data: BytesLike): Result;
+  decodeFunctionResult(functionFragment: "status", data: BytesLike): Result;
+  decodeFunctionResult(functionFragment: "title", data: BytesLike): Result;
+  decodeFunctionResult(functionFragment: "witnesses", data: BytesLike): Result;
 }
 
-export namespace AffidavitStoredEvent {
+export namespace AffidavitCreatedEvent {
   export type InputTuple = [
-    displayId: string,
-    status: string,
+    affidavitId: string,
+    issuer: AddressLike,
     timestamp: BigNumberish
   ];
   export type OutputTuple = [
-    displayId: string,
-    status: string,
+    affidavitId: string,
+    issuer: string,
     timestamp: bigint
   ];
   export interface OutputObject {
-    displayId: string;
-    status: string;
+    affidavitId: string;
+    issuer: string;
     timestamp: bigint;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
@@ -189,51 +301,81 @@ export interface Affidavit extends BaseContract {
     event?: TCEvent
   ): Promise<this>;
 
-  affidavitExists: TypedContractMethod<[arg0: string], [boolean], "view">;
+  affidavitId: TypedContractMethod<[], [string], "view">;
 
-  affidavits: TypedContractMethod<
-    [arg0: string],
+  category: TypedContractMethod<[], [string], "view">;
+
+  createAffidavit: TypedContractMethod<
+    [affidavitData: Affidavit.AffidavitDataStruct],
+    [void],
+    "payable"
+  >;
+
+  createdAt: TypedContractMethod<[], [bigint], "view">;
+
+  dateIssued: TypedContractMethod<[], [bigint], "view">;
+
+  dateRequested: TypedContractMethod<[], [bigint], "view">;
+
+  declaration: TypedContractMethod<[], [string], "view">;
+
+  description: TypedContractMethod<[], [string], "view">;
+
+  documentHashes: TypedContractMethod<[arg0: BigNumberish], [string], "view">;
+
+  getAffidavitBasicInfo: TypedContractMethod<
+    [],
+    [[string, string, string, string, string, bigint, bigint, string]],
+    "view"
+  >;
+
+  getAffidavitDetails: TypedContractMethod<
+    [],
+    [[string, string, string, bigint]],
+    "view"
+  >;
+
+  getAffidavitParticipants: TypedContractMethod<
+    [],
     [
-      [string, string, string, string, string, string, bigint] & {
-        displayId: string;
-        title: string;
-        category: string;
-        issuerId: string;
-        issuerIdCardNumber: string;
-        status: string;
-        timestamp: bigint;
+      [Affidavit.PartyStructOutput[], Affidavit.WitnessStructOutput[], string[]]
+    ],
+    "view"
+  >;
+
+  issuer: TypedContractMethod<[], [string], "view">;
+
+  issuerIdCardNumber: TypedContractMethod<[], [string], "view">;
+
+  issuerName: TypedContractMethod<[], [string], "view">;
+
+  parties: TypedContractMethod<
+    [arg0: BigNumberish],
+    [
+      [string, string, string, string] & {
+        role: string;
+        name: string;
+        idCardNumber: string;
+        userAddress: string;
       }
     ],
     "view"
   >;
 
-  getAffidavit: TypedContractMethod<
-    [_displayId: string],
-    [Affidavit.AffidavitDataStructOutput],
-    "view"
-  >;
+  status: TypedContractMethod<[], [string], "view">;
 
-  storeAffidavit: TypedContractMethod<
+  title: TypedContractMethod<[], [string], "view">;
+
+  witnesses: TypedContractMethod<
+    [arg0: BigNumberish],
     [
-      _displayId: string,
-      _title: string,
-      _category: string,
-      _issuerId: string,
-      _issuerIdCardNumber: string,
-      _partyIds: string[],
-      _partyIdCardNumbers: string[],
-      _witnessNames: string[],
-      _witnessIdCardNumbers: string[],
-      _status: string
+      [string, string, string] & {
+        name: string;
+        idCardNumber: string;
+        userAddress: string;
+      }
     ],
-    [void],
-    "nonpayable"
-  >;
-
-  updateAffidavitStatus: TypedContractMethod<
-    [_displayId: string, _status: string],
-    [void],
-    "nonpayable"
+    "view"
   >;
 
   getFunction<T extends ContractMethod = ContractMethod>(
@@ -241,76 +383,116 @@ export interface Affidavit extends BaseContract {
   ): T;
 
   getFunction(
-    nameOrSignature: "affidavitExists"
-  ): TypedContractMethod<[arg0: string], [boolean], "view">;
+    nameOrSignature: "affidavitId"
+  ): TypedContractMethod<[], [string], "view">;
   getFunction(
-    nameOrSignature: "affidavits"
+    nameOrSignature: "category"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
+    nameOrSignature: "createAffidavit"
   ): TypedContractMethod<
-    [arg0: string],
+    [affidavitData: Affidavit.AffidavitDataStruct],
+    [void],
+    "payable"
+  >;
+  getFunction(
+    nameOrSignature: "createdAt"
+  ): TypedContractMethod<[], [bigint], "view">;
+  getFunction(
+    nameOrSignature: "dateIssued"
+  ): TypedContractMethod<[], [bigint], "view">;
+  getFunction(
+    nameOrSignature: "dateRequested"
+  ): TypedContractMethod<[], [bigint], "view">;
+  getFunction(
+    nameOrSignature: "declaration"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
+    nameOrSignature: "description"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
+    nameOrSignature: "documentHashes"
+  ): TypedContractMethod<[arg0: BigNumberish], [string], "view">;
+  getFunction(
+    nameOrSignature: "getAffidavitBasicInfo"
+  ): TypedContractMethod<
+    [],
+    [[string, string, string, string, string, bigint, bigint, string]],
+    "view"
+  >;
+  getFunction(
+    nameOrSignature: "getAffidavitDetails"
+  ): TypedContractMethod<[], [[string, string, string, bigint]], "view">;
+  getFunction(
+    nameOrSignature: "getAffidavitParticipants"
+  ): TypedContractMethod<
+    [],
     [
-      [string, string, string, string, string, string, bigint] & {
-        displayId: string;
-        title: string;
-        category: string;
-        issuerId: string;
-        issuerIdCardNumber: string;
-        status: string;
-        timestamp: bigint;
+      [Affidavit.PartyStructOutput[], Affidavit.WitnessStructOutput[], string[]]
+    ],
+    "view"
+  >;
+  getFunction(
+    nameOrSignature: "issuer"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
+    nameOrSignature: "issuerIdCardNumber"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
+    nameOrSignature: "issuerName"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
+    nameOrSignature: "parties"
+  ): TypedContractMethod<
+    [arg0: BigNumberish],
+    [
+      [string, string, string, string] & {
+        role: string;
+        name: string;
+        idCardNumber: string;
+        userAddress: string;
       }
     ],
     "view"
   >;
   getFunction(
-    nameOrSignature: "getAffidavit"
-  ): TypedContractMethod<
-    [_displayId: string],
-    [Affidavit.AffidavitDataStructOutput],
-    "view"
-  >;
+    nameOrSignature: "status"
+  ): TypedContractMethod<[], [string], "view">;
   getFunction(
-    nameOrSignature: "storeAffidavit"
+    nameOrSignature: "title"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
+    nameOrSignature: "witnesses"
   ): TypedContractMethod<
+    [arg0: BigNumberish],
     [
-      _displayId: string,
-      _title: string,
-      _category: string,
-      _issuerId: string,
-      _issuerIdCardNumber: string,
-      _partyIds: string[],
-      _partyIdCardNumbers: string[],
-      _witnessNames: string[],
-      _witnessIdCardNumbers: string[],
-      _status: string
+      [string, string, string] & {
+        name: string;
+        idCardNumber: string;
+        userAddress: string;
+      }
     ],
-    [void],
-    "nonpayable"
-  >;
-  getFunction(
-    nameOrSignature: "updateAffidavitStatus"
-  ): TypedContractMethod<
-    [_displayId: string, _status: string],
-    [void],
-    "nonpayable"
+    "view"
   >;
 
   getEvent(
-    key: "AffidavitStored"
+    key: "AffidavitCreated"
   ): TypedContractEvent<
-    AffidavitStoredEvent.InputTuple,
-    AffidavitStoredEvent.OutputTuple,
-    AffidavitStoredEvent.OutputObject
+    AffidavitCreatedEvent.InputTuple,
+    AffidavitCreatedEvent.OutputTuple,
+    AffidavitCreatedEvent.OutputObject
   >;
 
   filters: {
-    "AffidavitStored(string,string,uint256)": TypedContractEvent<
-      AffidavitStoredEvent.InputTuple,
-      AffidavitStoredEvent.OutputTuple,
-      AffidavitStoredEvent.OutputObject
+    "AffidavitCreated(string,address,uint256)": TypedContractEvent<
+      AffidavitCreatedEvent.InputTuple,
+      AffidavitCreatedEvent.OutputTuple,
+      AffidavitCreatedEvent.OutputObject
     >;
-    AffidavitStored: TypedContractEvent<
-      AffidavitStoredEvent.InputTuple,
-      AffidavitStoredEvent.OutputTuple,
-      AffidavitStoredEvent.OutputObject
+    AffidavitCreated: TypedContractEvent<
+      AffidavitCreatedEvent.InputTuple,
+      AffidavitCreatedEvent.OutputTuple,
+      AffidavitCreatedEvent.OutputObject
     >;
   };
 }

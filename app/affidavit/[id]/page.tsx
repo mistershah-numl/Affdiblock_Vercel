@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { QRCodeCanvas } from "qrcode.react"
 import { ArrowLeftIcon, Download, Share2 } from "lucide-react"
@@ -9,51 +9,141 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { jsPDF } from "jspdf"
-
-// Mock affidavit data - in a real app, this would be fetched from the blockchain
-const affidavit = {
-  id: "AFF-2025-001",
-  title: "Affidavit of Ownership Transfer",
-  issuer: "John Doe",
-  category: "Car",
-  dateIssued: "2025-03-01",
-  status: "Active",
-  stampValue: "RS 100",
-  description:
-    "This affidavit certifies that the undersigned, John Doe, solemnly declares and affirms that the ownership of the vehicle has been lawfully transferred from Mr. A to Mr. B. The transfer has been executed with full mutual agreement and acknowledgment of both parties, adhering to the laws and regulations governing property ownership transfers. The affiant understands the legal implications of this statement and affirms its accuracy.",
-  declaration:
-    "I, John Doe, do hereby solemnly affirm and declare that the contents of this affidavit are true and correct to the best of my knowledge and belief, and that nothing has been concealed therein. I understand that any false statement made herein may be punishable under the law.",
-  signature: "John Doe",
-  parties: [
-    { role: "Seller", name: "Mr. A", idCard: "12345-6789012-3" },
-    { role: "Buyer", name: "Mr. B", idCard: "98765-4321098-7" },
-  ],
-  witnesses: [
-    { name: "Witness 1", idCard: "11111-2222222-3" },
-    { name: "Witness 2", idCard: "44444-5555555-6" },
-  ],
-  blockchainDetails: {
-    transactionHash: "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
-    blockNumber: 12345678,
-    timestamp: "2025-03-01T12:34:56Z",
-  },
-}
+import { toast } from "@/components/ui/use-toast"
+import { verifyAffidavit } from "@/lib/blockchain"
 
 export default function AffidavitDetailPage() {
   const router = useRouter()
   const params = useParams()
-  const id = params.id
+  const id = params.id as string
   const [qrValue, setQrValue] = useState("")
   const qrRef = useRef<HTMLCanvasElement>(null)
+  const [affidavit, setAffidavit] = useState<any>(null)
+  const [blockchainData, setBlockchainData] = useState<any>(null)
+  const [isVerifying, setIsVerifying] = useState(false)
+  const [isVerified, setIsVerified] = useState<boolean | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
 
   // Set QR code value when component mounts
-  useState(() => {
+  useEffect(() => {
     if (typeof window !== "undefined") {
       setQrValue(`${window.location.origin}/verify/${id}`)
     }
-  })
+
+    fetchAffidavit()
+  }, [id])
+
+  const fetchAffidavit = async () => {
+    try {
+      setIsLoading(true)
+      const response = await fetch(`/api/affidavits/get?id=${id}`)
+      const data = await response.json()
+
+      if (data.success) {
+        setAffidavit(data.affidavit)
+
+        // If the affidavit has blockchain details, verify in the background
+        if (data.affidavit.transactionHash || data.affidavit.blockchainHash) {
+          verifyOnBlockchainBackground()
+        }
+      } else {
+        toast({
+          title: "Error",
+          description: data.error || "Failed to fetch affidavit",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error("Error fetching affidavit:", error)
+      toast({
+        title: "Error",
+        description: "An unexpected error occurred",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const verifyOnBlockchainBackground = async () => {
+    try {
+      // Try to verify using the blockchain service directly
+      if (window.ethereum) {
+        const result = await verifyAffidavit(id)
+        if (result) {
+          setBlockchainData(result)
+          // Compare with MongoDB data
+          const isAuthentic = compareAffidavitData(affidavit, result)
+          setIsVerified(isAuthentic)
+        }
+      } else {
+        // Fallback to API if MetaMask is not available
+        const response = await fetch(`/api/affidavits/verify?id=${id}`)
+        const data = await response.json()
+        if (data.success) {
+          setBlockchainData(data.blockchainData)
+          setIsVerified(data.verified)
+        }
+      }
+    } catch (error) {
+      console.error("Background verification error:", error)
+      // Don't show error toast for background verification
+    }
+  }
+
+  const compareAffidavitData = (mongoData: any, blockchainData: any) => {
+    if (!mongoData || !blockchainData) return false
+
+    // Basic comparison of essential fields
+    const basicChecks = [
+      mongoData.displayId === blockchainData.affidavitId,
+      mongoData.title === blockchainData.title,
+      mongoData.category === blockchainData.category,
+      // Add more checks as needed
+    ]
+
+    return !basicChecks.some((check) => !check)
+  }
+
+  const verifyOnBlockchain = async () => {
+    try {
+      setIsVerifying(true)
+      const response = await fetch(`/api/affidavits/verify?id=${id}`)
+      const data = await response.json()
+
+      if (data.success) {
+        setIsVerified(data.verified)
+        setBlockchainData(data.blockchainData)
+
+        toast({
+          title: data.verified ? "Verification Successful" : "Verification Failed",
+          description: data.verified
+            ? "This affidavit is verified on the blockchain"
+            : "This affidavit could not be verified on the blockchain",
+          variant: data.verified ? "default" : "destructive",
+        })
+      } else {
+        toast({
+          title: "Verification Failed",
+          description: data.reason || data.error || "Failed to verify affidavit",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error("Error verifying affidavit:", error)
+      toast({
+        title: "Error",
+        description: "An unexpected error occurred during verification",
+        variant: "destructive",
+      })
+    } finally {
+      setIsVerifying(false)
+    }
+  }
 
   const downloadPDF = () => {
+    if (!affidavit) return
+
     const pdf = new jsPDF("p", "mm", "a4")
 
     // Get QR code image
@@ -82,7 +172,7 @@ export default function AffidavitDetailPage() {
     pdf.text("Government of Pakistan", 105, 30, { align: "center" })
 
     pdf.setFontSize(18)
-    pdf.text("AFFIDAVIT OF OWNERSHIP TRANSFER", 105, 40, { align: "center" })
+    pdf.text(affidavit.title.toUpperCase(), 105, 40, { align: "center" })
 
     // Add QR code
     pdf.addImage(qrImage, "PNG", 165, 15, 30, 30)
@@ -90,44 +180,60 @@ export default function AffidavitDetailPage() {
     // Add affidavit details
     pdf.setFont("helvetica", "normal")
     pdf.setFontSize(12)
-    pdf.text(`Affidavit ID: ${affidavit.id}`, 15, 55)
-    pdf.text(`Issued By: ${affidavit.issuer}`, 15, 62)
+    pdf.text(`Affidavit ID: ${affidavit.displayId}`, 15, 55)
+    pdf.text(`Issued By: ${affidavit.issuerName}`, 15, 62)
     pdf.text(`Category: ${affidavit.category}`, 15, 69)
-    pdf.text(`Date Issued: ${affidavit.dateIssued}`, 15, 76)
-    pdf.text(`Stamp Paper Value: ${affidavit.stampValue}`, 15, 83)
-    pdf.text(`Status: ${affidavit.status}`, 15, 90)
+    pdf.text(`Date Issued: ${new Date(affidavit.dateIssued).toLocaleDateString()}`, 15, 76)
+    pdf.text(`Status: ${affidavit.status}`, 15, 83)
 
     // Add parties
     pdf.setFont("helvetica", "bold")
     pdf.setFontSize(14)
-    pdf.text("PARTIES", 15, 105)
+    pdf.text("PARTIES", 15, 98)
     pdf.setFont("helvetica", "normal")
     pdf.setFontSize(12)
 
-    affidavit.parties.forEach((party, index) => {
-      const yPos = 112 + index * 7
-      pdf.text(`${party.role}: ${party.name} (ID: ${party.idCard})`, 15, yPos)
-    })
+    let yPos = 105
+
+    // Add issuer
+    pdf.text(`Issuer: ${affidavit.issuerName}`, 15, yPos)
+    yPos += 7
+
+    // Add seller if exists
+    if (affidavit.sellerName) {
+      pdf.text(`Seller: ${affidavit.sellerName}`, 15, yPos)
+      yPos += 7
+    }
+
+    // Add buyer if exists
+    if (affidavit.buyerName) {
+      pdf.text(`Buyer: ${affidavit.buyerName}`, 15, yPos)
+      yPos += 7
+    }
 
     // Add witnesses
-    pdf.setFont("helvetica", "bold")
-    pdf.setFontSize(14)
-    pdf.text("WITNESSES", 15, 135)
-    pdf.setFont("helvetica", "normal")
-    pdf.setFontSize(12)
+    if (affidavit.witnesses && affidavit.witnesses.length > 0) {
+      pdf.setFont("helvetica", "bold")
+      pdf.setFontSize(14)
+      pdf.text("WITNESSES", 15, yPos + 10)
+      pdf.setFont("helvetica", "normal")
+      pdf.setFontSize(12)
 
-    affidavit.witnesses.forEach((witness, index) => {
-      const yPos = 142 + index * 7
-      pdf.text(`${index + 1}. ${witness.name} (ID: ${witness.idCard})`, 15, yPos)
-    })
+      yPos += 17
+
+      affidavit.witnesses.forEach((witness: any, index: number) => {
+        pdf.text(`${index + 1}. ${witness.name} (ID: ${witness.idCardNumber})`, 15, yPos)
+        yPos += 7
+      })
+    }
 
     // Add declaration
     pdf.setFont("helvetica", "bold")
     pdf.setFontSize(14)
-    pdf.text("DECLARATION", 15, 165)
+    pdf.text("DECLARATION", 15, yPos + 10)
     pdf.setFont("helvetica", "normal")
     pdf.setFontSize(12)
-    pdf.text(affidavit.declaration, 15, 172, { maxWidth: 180 })
+    pdf.text(affidavit.declaration, 15, yPos + 17, { maxWidth: 180 })
 
     // Add statement
     pdf.setFont("helvetica", "bold")
@@ -141,7 +247,7 @@ export default function AffidavitDetailPage() {
     pdf.setFont("helvetica", "bold")
     pdf.text("Authorized Signature:", 15, 250)
     pdf.setFont("helvetica", "normal")
-    pdf.text(affidavit.signature, 15, 257)
+    pdf.text(affidavit.issuerName, 15, 257)
 
     pdf.setFont("helvetica", "bold")
     pdf.text("Official Seal:", 150, 250)
@@ -151,43 +257,39 @@ export default function AffidavitDetailPage() {
     pdf.setFontSize(10)
     pdf.setTextColor(120, 120, 120)
     pdf.text("AffidBlock - Blockchain-Based Verification Platform", 105, 280, { align: "center" })
-    pdf.text("Verify this document at www.affidblock.com/verify", 105, 285, { align: "center" })
+    pdf.text(`Verify this document at ${window.location.origin}/verify/${id}`, 105, 285, { align: "center" })
 
     // Save PDF
     pdf.save(`Affidavit_${id}.pdf`)
   }
 
   const shareAffidavit = async () => {
-    // Check if the Web Share API is supported
     if (navigator.share && window.isSecureContext) {
       try {
         await navigator.share({
-          title: `Affidavit: ${affidavit.title}`,
-          text: `View and verify this affidavit: ${affidavit.title}`,
+          title: `Affidavit: ${affidavit?.title || id}`,
+          text: `View and verify this affidavit: ${affidavit?.title || id}`,
           url: window.location.href,
         })
         console.log("Content shared successfully")
       } catch (error) {
         console.error("Error sharing:", error)
-
-        // Fallback to clipboard if sharing fails
         fallbackToClipboard()
       }
     } else {
-      // Fallback for browsers that don't support the Web Share API
       fallbackToClipboard()
     }
   }
 
-  // Fallback function to copy to clipboard
   const fallbackToClipboard = () => {
     try {
       navigator.clipboard.writeText(window.location.href)
-      alert("Link copied to clipboard!")
+      toast({
+        title: "Link Copied",
+        description: "Link copied to clipboard!",
+      })
     } catch (error) {
       console.error("Failed to copy to clipboard:", error)
-
-      // Final fallback - show the URL to manually copy
       const textArea = document.createElement("textarea")
       textArea.value = window.location.href
       document.body.appendChild(textArea)
@@ -196,13 +298,94 @@ export default function AffidavitDetailPage() {
 
       try {
         document.execCommand("copy")
-        alert("Link copied to clipboard!")
+        toast({
+          title: "Link Copied",
+          description: "Link copied to clipboard!",
+        })
       } catch (err) {
         console.error("Failed to copy using execCommand:", err)
-        alert(`Please copy this link manually: ${window.location.href}`)
+        toast({
+          title: "Copy Failed",
+          description: `Please copy this link manually: ${window.location.href}`,
+          variant: "destructive",
+        })
       }
 
       document.body.removeChild(textArea)
+    }
+  }
+
+  const handleViewProfile = async (idCard: string) => {
+    try {
+      const response = await fetch(`/api/user?filter=idCardNumber:${idCard}`)
+      const data = await response.json()
+      if (data.success && data.users.length > 0) {
+        router.push(`/dashboard/users/${data.users[0]._id}`)
+      } else {
+        toast({
+          title: "Error",
+          description: "User not found",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to fetch user profile",
+        variant: "destructive",
+      })
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="container mx-auto px-4 py-8 flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto"></div>
+          <p className="mt-4 text-lg">Loading affidavit...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!affidavit) {
+    return (
+      <div className="container mx-auto px-4 py-8 flex items-center justify-center min-h-screen">
+        <Card className="w-full max-w-md">
+          <CardContent className="p-6">
+            <h2 className="text-xl font-bold text-center mb-4">Affidavit Not Found</h2>
+            <p className="text-gray-500 text-center mb-6">
+              The requested affidavit could not be found or you don't have permission to view it.
+            </p>
+            <div className="flex justify-center">
+              <Button onClick={() => router.push("/dashboard/affidavits")}>Back to Affidavits</Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  const getStatusBadge = (status: string) => {
+    switch (status.toLowerCase()) {
+      case "active":
+        return <Badge className="bg-green-500 text-white">Active</Badge>
+      case "pending":
+        return (
+          <Badge variant="outline" className="text-orange-500 border-orange-500">
+            Pending
+          </Badge>
+        )
+      case "rejected":
+        return <Badge variant="destructive">Rejected</Badge>
+      case "revoked":
+        return (
+          <Badge variant="secondary" className="bg-gray-500 text-white">
+            Revoked
+          </Badge>
+        )
+      default:
+        return <Badge variant="secondary">{status}</Badge>
     }
   }
 
@@ -248,11 +431,10 @@ export default function AffidavitDetailPage() {
                 <TabsContent value="details" className="pt-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                     {[
-                      { label: "Affidavit ID", value: affidavit.id },
-                      { label: "Issuer", value: affidavit.issuer },
+                      { label: "Affidavit ID", value: affidavit.displayId },
+                      { label: "Issuer", value: affidavit.issuerName },
                       { label: "Category", value: affidavit.category },
-                      { label: "Date Issued", value: affidavit.dateIssued },
-                      { label: "Stamp Paper Value", value: affidavit.stampValue },
+                      { label: "Date Issued", value: new Date(affidavit.dateIssued).toLocaleDateString() },
                       { label: "Status", value: affidavit.status },
                     ].map((item, index) => (
                       <div key={index} className="bg-gray-100 p-4 rounded-lg shadow-sm">
@@ -271,7 +453,7 @@ export default function AffidavitDetailPage() {
                   <div className="mt-10 flex justify-between items-center">
                     <div>
                       <p className="text-sm text-gray-500">Authorized Signature</p>
-                      <h2 className="text-lg font-semibold">{affidavit.signature}</h2>
+                      <h2 className="text-lg font-semibold">{affidavit.issuerName}</h2>
                     </div>
                     <div className="text-right">
                       <p className="text-sm text-gray-500">Official Seal</p>
@@ -285,29 +467,49 @@ export default function AffidavitDetailPage() {
                     <div>
                       <h2 className="text-lg font-semibold text-gray-700 mb-3">Parties</h2>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {affidavit.parties.map((party, index) => (
-                          <div key={index} className="bg-gray-100 p-4 rounded-lg shadow-sm">
+                        <div className="bg-gray-100 p-4 rounded-lg shadow-sm">
+                          <Badge variant="outline" className="mb-2">
+                            Issuer
+                          </Badge>
+                          <h3 className="font-semibold cursor-pointer">{affidavit.issuerName}</h3>
+                          <p className="text-sm text-gray-500">ID Card: {affidavit.issuerIdCardNumber}</p>
+                        </div>
+
+                        {affidavit.sellerName && (
+                          <div className="bg-gray-100 p-4 rounded-lg shadow-sm">
                             <Badge variant="outline" className="mb-2">
-                              {party.role}
+                              Seller
                             </Badge>
-                            <h3 className="font-semibold">{party.name}</h3>
-                            <p className="text-sm text-gray-500">ID Card: {party.idCard}</p>
+                            <h3 className="font-semibold cursor-pointer">{affidavit.sellerName}</h3>
+                            <p className="text-sm text-gray-500">ID Card: {affidavit.sellerIdCardNumber}</p>
                           </div>
-                        ))}
+                        )}
+
+                        {affidavit.buyerName && (
+                          <div className="bg-gray-100 p-4 rounded-lg shadow-sm">
+                            <Badge variant="outline" className="mb-2">
+                              Buyer
+                            </Badge>
+                            <h3 className="font-semibold cursor-pointer">{affidavit.buyerName}</h3>
+                            <p className="text-sm text-gray-500">ID Card: {affidavit.buyerIdCardNumber}</p>
+                          </div>
+                        )}
                       </div>
                     </div>
 
-                    <div>
-                      <h2 className="text-lg font-semibold text-gray-700 mb-3">Witnesses</h2>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {affidavit.witnesses.map((witness, index) => (
-                          <div key={index} className="bg-gray-100 p-4 rounded-lg shadow-sm">
-                            <h3 className="font-semibold">{witness.name}</h3>
-                            <p className="text-sm text-gray-500">ID Card: {witness.idCard}</p>
-                          </div>
-                        ))}
+                    {affidavit.witnesses && affidavit.witnesses.length > 0 && (
+                      <div>
+                        <h2 className="text-lg font-semibold text-gray-700 mb-3">Witnesses</h2>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {affidavit.witnesses.map((witness: any, index: number) => (
+                            <div key={index} className="bg-gray-100 p-4 rounded-lg shadow-sm">
+                              <h3 className="font-semibold cursor-pointer">{witness.name}</h3>
+                              <p className="text-sm text-gray-500">ID Card: {witness.idCardNumber}</p>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </div>
                 </TabsContent>
 
@@ -316,7 +518,7 @@ export default function AffidavitDetailPage() {
                     <div className="bg-gray-100 p-4 rounded-lg">
                       <h3 className="font-semibold mb-2">Transaction Hash</h3>
                       <p className="text-sm font-mono bg-white p-2 rounded border overflow-x-auto">
-                        {affidavit.blockchainDetails.transactionHash}
+                        {affidavit.transactionHash || affidavit.blockchainHash || "Not available"}
                       </p>
                     </div>
 
@@ -324,14 +526,14 @@ export default function AffidavitDetailPage() {
                       <div className="bg-gray-100 p-4 rounded-lg">
                         <h3 className="font-semibold mb-2">Block Number</h3>
                         <p className="text-sm font-mono bg-white p-2 rounded border">
-                          {affidavit.blockchainDetails.blockNumber}
+                          {affidavit.blockNumber || "Not available"}
                         </p>
                       </div>
 
                       <div className="bg-gray-100 p-4 rounded-lg">
                         <h3 className="font-semibold mb-2">Timestamp</h3>
                         <p className="text-sm font-mono bg-white p-2 rounded border">
-                          {affidavit.blockchainDetails.timestamp}
+                          {affidavit.dateIssued ? new Date(affidavit.dateIssued).toISOString() : "Not available"}
                         </p>
                       </div>
                     </div>
@@ -339,10 +541,29 @@ export default function AffidavitDetailPage() {
                     <div className="bg-blue-50 p-4 rounded-lg border border-blue-200 mt-6">
                       <h3 className="font-semibold text-blue-800 mb-2">Blockchain Verification</h3>
                       <p className="text-sm text-blue-700">
-                        This affidavit has been verified on the blockchain and is tamper-proof. The digital signature
-                        and hash ensure that this document cannot be altered without detection.
+                        This affidavit has been stored on the blockchain for tamper-proof verification. The digital
+                        signature and hash ensure that this document cannot be altered without detection.
                       </p>
                     </div>
+
+                    <Button onClick={verifyOnBlockchain} variant="outline" disabled={isVerifying}>
+                      {isVerifying ? "Verifying..." : "Verify on Blockchain"}
+                    </Button>
+
+                    {isVerified !== null && (
+                      <div
+                        className={`p-4 rounded-lg ${isVerified ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200"}`}
+                      >
+                        <h3 className={`font-semibold mb-2 ${isVerified ? "text-green-800" : "text-red-800"}`}>
+                          {isVerified ? "Verification Successful" : "Verification Failed"}
+                        </h3>
+                        <p className={`text-sm ${isVerified ? "text-green-700" : "text-red-700"}`}>
+                          {isVerified
+                            ? "This affidavit has been verified on the blockchain and is authentic."
+                            : "This affidavit could not be verified on the blockchain. The data may have been tampered with."}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </TabsContent>
               </Tabs>
@@ -378,6 +599,10 @@ export default function AffidavitDetailPage() {
                 >
                   <Share2 className="h-4 w-4" />
                   <span>Share Affidavit</span>
+                </Button>
+
+                <Button onClick={verifyOnBlockchain} variant="outline" className="w-full">
+                  Verify on Blockchain
                 </Button>
               </div>
 

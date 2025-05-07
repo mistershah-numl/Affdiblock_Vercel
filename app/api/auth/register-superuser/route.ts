@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import dbConnect from "@/lib/db"
+import {dbConnect} from "@/lib/db"
 import User from "@/lib/models/user"
 
 export async function POST() {

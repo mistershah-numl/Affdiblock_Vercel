@@ -1,9 +1,12 @@
 import { type NextRequest, NextResponse } from "next/server"
 import mongoose from "mongoose"
-import dbConnect from "@/lib/db"
+import {dbConnect} from "@/lib/db"
 // Import User model first to ensure it is registered
 import User from "@/lib/models/user"
 import AffidavitRequest from "@/lib/models/affidavit-request"
+
+// Force model registration
+User
 
 export async function GET(request: NextRequest) {
   try {

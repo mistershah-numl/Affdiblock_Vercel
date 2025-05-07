@@ -14,26 +14,26 @@ import * as Contracts from ".";
 declare module "hardhat/types/runtime" {
   interface HardhatEthersHelpers extends HardhatEthersHelpersBase {
     getContractFactory(
-      name: "Affidavit",
+      name: "AffidavitRegistry",
       signerOrOptions?: ethers.Signer | FactoryOptions
-    ): Promise<Contracts.Affidavit__factory>;
+    ): Promise<Contracts.AffidavitRegistry__factory>;
 
     getContractAt(
-      name: "Affidavit",
+      name: "AffidavitRegistry",
       address: string | ethers.Addressable,
       signer?: ethers.Signer
-    ): Promise<Contracts.Affidavit>;
+    ): Promise<Contracts.AffidavitRegistry>;
 
     deployContract(
-      name: "Affidavit",
+      name: "AffidavitRegistry",
       signerOrOptions?: ethers.Signer | DeployContractOptions
-    ): Promise<Contracts.Affidavit>;
+    ): Promise<Contracts.AffidavitRegistry>;
 
     deployContract(
-      name: "Affidavit",
+      name: "AffidavitRegistry",
       args: any[],
       signerOrOptions?: ethers.Signer | DeployContractOptions
-    ): Promise<Contracts.Affidavit>;
+    ): Promise<Contracts.AffidavitRegistry>;
 
     // default types
     getContractFactory(

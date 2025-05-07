@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import dbConnect from "@/lib/db"
+import {dbConnect} from "@/lib/db"
 import AffidavitRequest from "@/lib/models/affidavit-request"
 import User from "@/lib/models/user"
 import { uploadFile } from "@/lib/upload"

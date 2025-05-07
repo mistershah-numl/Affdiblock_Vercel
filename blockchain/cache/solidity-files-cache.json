@@ -1,14 +1,13 @@
 {
   "_format": "hh-sol-cache-2",
   "files": {
-    "D:\\FYP\\V62-AFFIDBLOCK\\blockchain\\contracts\\Affidavit.sol": {
-      "lastModificationDate": 1746296137734,
-      "contentHash": "14096be0ce8f83c24e87526d72487e60",
-      "sourceName": "contracts/Affidavit.sol",
+    "D:\\FYP\\V62-AFFIDBLOCK\\blockchain\\contracts\\AffidavitRegistry.sol": {
+      "lastModificationDate": 1746507285894,
+      "contentHash": "ace9da5309e62b46de326f4039814335",
+      "sourceName": "contracts/AffidavitRegistry.sol",
       "solcConfig": {
-        "version": "0.8.20",
+        "version": "0.8.19",
         "settings": {
-          "evmVersion": "paris",
           "optimizer": {
             "enabled": false,
             "runs": 200
@@ -31,10 +30,10 @@
       },
       "imports": [],
       "versionPragmas": [
-        "^0.8.20"
+        "^0.8.0"
       ],
       "artifacts": [
-        "Affidavit"
+        "AffidavitRegistry"
       ]
     }
   }

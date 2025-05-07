@@ -1,6 +1,6 @@
 import jwt from "jsonwebtoken"
 import mongoose, { Schema, Document } from "mongoose"
-import dbConnect from "@/lib/db"
+import {dbConnect} from "@/lib/db"
 
 const JWT_SECRET = process.env.JWT_SECRET || "AFFIDBLOCK"
 
