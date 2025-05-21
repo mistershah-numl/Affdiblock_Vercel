@@ -1,35 +1,55 @@
-"use client"
+"use client";
 
-import type React from "react"
-import { useState, useEffect, useRef } from "react"
-import { useRouter } from "next/navigation"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Separator } from "@/components/ui/separator"
-import { Badge } from "@/components/ui/badge"
-import { Loader2, Save, Upload, Shield, Key, AlertCircle, Check, X } from "lucide-react"
-import { ProtectedRoute } from "@/components/protected-route"
-import { toast } from "@/components/ui/use-toast"
-import Image from "next/image"
-import { Progress } from "@/components/ui/progress"
-import { useAuth } from "@/lib/auth-context"
+import type React from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Separator } from "@/components/ui/separator";
+import { Badge } from "@/components/ui/badge";
+import { Loader2, Save, Upload, Shield, Key, AlertCircle, Check, X } from "lucide-react";
+import { ProtectedRoute } from "@/components/protected-route";
+import { toast } from "@/components/ui/use-toast";
+import Image from "next/image";
+import { Progress } from "@/components/ui/progress";
+import { useAuth } from "@/lib/auth-context";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
+} from "@/components/ui/select";
+
+// Helper function to generate the dynamic image URL
+const getDynamicImageUrl = (path: string | null | undefined) => {
+  if (!path) {
+    return "/placeholder.svg?height=128&width=128";
+  }
+
+  // Check if the path is already an API URL (e.g., /api/user/get-image-dynamically?path=...)
+  let cleanPath = path;
+  const apiPrefix = "/api/user/get-image-dynamically?path=";
+  if (path.startsWith(apiPrefix)) {
+    // Extract the actual file path from the URL
+    const encodedPath = path.slice(apiPrefix.length);
+    cleanPath = decodeURIComponent(encodedPath);
+  }
+
+  // Remove leading slash if present
+  cleanPath = cleanPath.startsWith("/") ? cleanPath.slice(1) : cleanPath;
+  // Construct the API URL without a timestamp (rely on Cache-Control: no-store)
+  return `/api/user/get-image-dynamically?path=${encodeURIComponent(cleanPath)}`;
+};
 
 export default function ProfilePage() {
-  const router = useRouter()
-  const { user, token, updateUser, isLoading, isAuthenticated, logout } = useAuth()
-  const [isProfileLoading, setIsProfileLoading] = useState(false)
+  const router = useRouter();
+  const { user, token, updateUser, isLoading, isAuthenticated, logout } = useAuth();
+  const [isProfileLoading, setIsProfileLoading] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -38,23 +58,26 @@ export default function ProfilePage() {
     address: "",
     bio: "",
     activeRole: "",
-  })
-  const [avatarFile, setAvatarFile] = useState<File | null>(null)
-  const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
-  const avatarInputRef = useRef<HTMLInputElement>(null)
+  });
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [avatarKey, setAvatarKey] = useState(Date.now()); // Force image refresh only after upload
+  const avatarInputRef = useRef<HTMLInputElement>(null);
 
-  const [currentPassword, setCurrentPassword] = useState("")
-  const [newPassword, setNewPassword] = useState("")
-  const [confirmPassword, setConfirmPassword] = useState("")
-  const [isChangingPassword, setIsChangingPassword] = useState(false)
-  const [passwordStrength, setPasswordStrength] = useState(0)
-  const [passwordErrors, setPasswordErrors] = useState<string[]>([])
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [passwordStrength, setPasswordStrength] = useState(0);
+  const [passwordErrors, setPasswordErrors] = useState<string[]>([]);
+
+  // Memoize the ID card image URLs to prevent re-fetching unless the URLs change
+  const idCardFrontUrl = useMemo(() => getDynamicImageUrl(user?.idCardFrontUrl), [user?.idCardFrontUrl]);
+  const idCardBackUrl = useMemo(() => getDynamicImageUrl(user?.idCardBackUrl), [user?.idCardBackUrl]);
 
   useEffect(() => {
-    console.log("ProfilePage auth state:", { isLoading, isAuthenticated, user: user?.email })
     if (!isLoading && !isAuthenticated) {
-      console.log("ProfilePage redirecting to /login")
-      router.push("/login")
+      router.push("/login");
     }
     if (user) {
       setFormData({
@@ -65,49 +88,50 @@ export default function ProfilePage() {
         address: user.address || "",
         bio: user.bio || "",
         activeRole: user.activeRole || "",
-      })
-      setAvatarPreview(user.avatar || null)
+      });
+      setAvatarPreview(user.avatar || null);
+      // Only update avatarKey if the avatar has changed (handled in handleAvatarUpload)
     }
-  }, [user, isLoading, isAuthenticated, router])
+  }, [user, isLoading, isAuthenticated, router]);
 
   useEffect(() => {
-    const errors: string[] = []
-    let strength = 0
+    const errors: string[] = [];
+    let strength = 0;
     if (newPassword) {
-      if (newPassword.length >= 8) strength += 25
-      else errors.push("Password must be at least 8 characters long")
-      if (/[A-Z]/.test(newPassword)) strength += 25
-      else errors.push("Password must contain at least one uppercase letter")
-      if (/\d/.test(newPassword)) strength += 25
-      else errors.push("Password must contain at least one number")
-      if (/[^A-Za-z0-9]/.test(newPassword)) strength += 25
-      else errors.push("Password must contain at least one special character")
+      if (newPassword.length >= 8) strength += 25;
+      else errors.push("Password must be at least 8 characters long");
+      if (/[A-Z]/.test(newPassword)) strength += 25;
+      else errors.push("Password must contain at least one uppercase letter");
+      if (/\d/.test(newPassword)) strength += 25;
+      else errors.push("Password must contain at least one number");
+      if (/[^A-Za-z0-9]/.test(newPassword)) strength += 25;
+      else errors.push("Password must contain at least one special character");
       if (formData.name && formData.name.length > 2) {
-        const nameParts = formData.name.toLowerCase().split(" ")
+        const nameParts = formData.name.toLowerCase().split(" ");
         for (const part of nameParts) {
           if (part.length > 2 && newPassword.toLowerCase().includes(part)) {
-            errors.push("Password cannot contain parts of your name")
-            strength = Math.max(0, strength - 25)
-            break
+            errors.push("Password cannot contain parts of your name");
+            strength = Math.max(0, strength - 25);
+            break;
           }
         }
       }
     }
-    setPasswordStrength(strength)
-    setPasswordErrors(errors)
-  }, [newPassword, formData.name])
+    setPasswordStrength(strength);
+    setPasswordErrors(errors);
+  }, [newPassword, formData.name]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target
-    setFormData((prev) => ({ ...prev, [name]: value }))
-  }
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+  };
 
   const handleRoleChange = (value: string) => {
-    setFormData((prev) => ({ ...prev, activeRole: value }))
-  }
+    setFormData((prev) => ({ ...prev, activeRole: value }));
+  };
 
   const handleSaveProfile = async () => {
-    setIsProfileLoading(true)
+    setIsProfileLoading(true);
     try {
       const response = await fetch("/api/user/profile", {
         method: "PUT",
@@ -122,60 +146,59 @@ export default function ProfilePage() {
           bio: formData.bio,
           activeRole: formData.activeRole,
         }),
-      })
-      const data = await response.json()
+      });
+      const data = await response.json();
       if (data.success) {
-        updateUser(data.user)
+        updateUser(data.user);
         toast({
           title: "Profile updated",
           description: "Your profile has been updated successfully.",
-        })
+        });
       } else {
         toast({
           title: "Error",
           description: data.error || "Failed to update profile",
           variant: "destructive",
-        })
+        });
       }
     } catch (error) {
-      console.error("Error updating profile:", error)
       toast({
         title: "Error",
         description: "An unexpected error occurred",
         variant: "destructive",
-      })
+      });
     } finally {
-      setIsProfileLoading(false)
+      setIsProfileLoading(false);
     }
-  }
+  };
 
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0]
+      const file = e.target.files[0];
       if (file.size > 5 * 1024 * 1024) {
         toast({
           title: "Error",
           description: "Avatar must be less than 5MB",
           variant: "destructive",
-        })
-        return
+        });
+        return;
       }
       if (!file.type.startsWith("image/")) {
         toast({
           title: "Error",
           description: "Avatar must be an image file",
           variant: "destructive",
-        })
-        return
+        });
+        return;
       }
-      setAvatarFile(file)
-      const reader = new FileReader()
+      setAvatarFile(file);
+      const reader = new FileReader();
       reader.onload = (event) => {
-        setAvatarPreview(event.target?.result as string)
-      }
-      reader.readAsDataURL(file)
+        setAvatarPreview(event.target?.result as string);
+      };
+      reader.readAsDataURL(file);
     }
-  }
+  };
 
   const handleAvatarUpload = async () => {
     if (!avatarFile) {
@@ -183,75 +206,76 @@ export default function ProfilePage() {
         title: "Error",
         description: "Please select an image to upload",
         variant: "destructive",
-      })
-      return
+      });
+      return;
     }
 
-    setIsProfileLoading(true)
+    setIsProfileLoading(true);
     try {
-      const formData = new FormData()
-      formData.append("avatar", avatarFile)
+      const formData = new FormData();
+      formData.append("avatar", avatarFile);
       const response = await fetch("/api/user/avatar", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
         },
         body: formData,
-      })
-      const data = await response.json()
+      });
+      const data = await response.json();
       if (data.success) {
-        updateUser(data.user)
+        updateUser(data.user);
         toast({
           title: "Avatar updated",
-          description: "Your profile picture has been updated successfully.",
-        })
-        setAvatarFile(null)
-        setAvatarPreview(data.user.avatar)
+          description: "Your profile picture has been uploaded successfully.",
+        });
+        setAvatarFile(null);
+        setAvatarPreview(null);
+        setAvatarKey(Date.now()); // Force refresh with new key after upload
+        router.refresh(); // Refresh the page to ensure updated data
       } else {
         toast({
           title: "Error",
           description: data.error || "Failed to update avatar",
           variant: "destructive",
-        })
+        });
       }
     } catch (error) {
-      console.error("Error uploading avatar:", error)
       toast({
         title: "Error",
         description: "An unexpected error occurred",
         variant: "destructive",
-      })
+      });
     } finally {
-      setIsProfileLoading(false)
+      setIsProfileLoading(false);
     }
-  }
+  };
 
   const validatePasswordForm = () => {
     const errors: {
-      currentPassword?: string
-      newPassword?: string
-      confirmPassword?: string
-    } = {}
-    if (!currentPassword) errors.currentPassword = "Current password is required"
-    if (!newPassword) errors.newPassword = "New password is required"
-    else if (passwordErrors.length > 0) errors.newPassword = "Password does not meet requirements"
-    if (!confirmPassword) errors.confirmPassword = "Please confirm your new password"
-    else if (newPassword !== confirmPassword) errors.confirmPassword = "Passwords do not match"
-    return errors
-  }
+      currentPassword?: string;
+      newPassword?: string;
+      confirmPassword?: string;
+    } = {};
+    if (!currentPassword) errors.currentPassword = "Current password is required";
+    if (!newPassword) errors.newPassword = "New password is required";
+    else if (passwordErrors.length > 0) errors.newPassword = "Password does not meet requirements";
+    if (!confirmPassword) errors.confirmPassword = "Please confirm your new password";
+    else if (newPassword !== confirmPassword) errors.confirmPassword = "Passwords do not match";
+    return errors;
+  };
 
   const handleChangePassword = async () => {
-    const errors = validatePasswordForm()
+    const errors = validatePasswordForm();
     if (Object.keys(errors).length > 0) {
       toast({
         title: "Error",
         description: Object.values(errors)[0],
         variant: "destructive",
-      })
-      return
+      });
+      return;
     }
 
-    setIsChangingPassword(true)
+    setIsChangingPassword(true);
     try {
       const response = await fetch("/api/user/change-password", {
         method: "POST",
@@ -263,75 +287,71 @@ export default function ProfilePage() {
           currentPassword,
           newPassword,
         }),
-      })
-      const data = await response.json()
+      });
+      const data = await response.json();
       if (data.success) {
         toast({
           title: "Password Changed",
           description: "Your password has been updated successfully. Redirecting to login...",
           className: "bg-green-100 border-green-500",
-        })
-        logout()
+        });
+        setTimeout(() => {
+          logout();
+          router.push("/login");
+        }, 2000);
       } else {
         toast({
           title: "Error",
           description: data.error || "Failed to update password",
           variant: "destructive",
-        })
+        });
       }
     } catch (error) {
-      console.error("Error changing password:", error)
       toast({
         title: "Error",
         description: "An unexpected error occurred",
         variant: "destructive",
-      })
+      });
     } finally {
-      setIsChangingPassword(false)
-      setCurrentPassword("")
-      setNewPassword("")
-      setConfirmPassword("")
+      setIsChangingPassword(false);
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
     }
-  }
+  };
 
   const getPasswordStrengthText = () => {
-    if (passwordStrength === 0) return "Very Weak"
-    if (passwordStrength <= 25) return "Weak"
-    if (passwordStrength <= 50) return "Medium"
-    if (passwordStrength <= 75) return "Strong"
-    return "Very Strong"
-  }
+    if (passwordStrength === 0) return "Very Weak";
+    if (passwordStrength <= 25) return "Weak";
+    if (passwordStrength <= 50) return "Medium";
+    if (passwordStrength <= 75) return "Strong";
+    return "Very Strong";
+  };
 
   const getPasswordStrengthColor = () => {
-    if (passwordStrength === 0) return "bg-gray-200"
-    if (passwordStrength <= 25) return "bg-red-500"
-    if (passwordStrength <= 50) return "bg-orange-500"
-    if (passwordStrength <= 75) return "bg-yellow-500"
-    return "bg-green-500"
-  }
+    if (passwordStrength === 0) return "bg-gray-200";
+    if (passwordStrength <= 25) return "bg-red-500";
+    if (passwordStrength <= 50) return "bg-orange-500";
+    if (passwordStrength <= 75) return "bg-yellow-500";
+    return "bg-green-500";
+  };
 
-  if (isLoading) {
-    return <div>Loading...</div>
+  if (isLoading || !user) {
+    return <div>Loading...</div>;
   }
 
   if (!isAuthenticated) {
-    return null
-  }
-
-  if (!user) {
-    return <div>Loading user data...</div>
+    return null;
   }
 
   return (
     <ProtectedRoute>
       <div className="flex flex-col gap-6 p-6">
-        {/* Header Section */}
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Profile</h1>
           <p className="text-gray-500">Manage your account settings and profile information</p>
         </div>
 
-        {/* Tabs Section */}
         <Tabs defaultValue="profile" className="w-full">
           <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="profile">Profile</TabsTrigger>
@@ -339,7 +359,6 @@ export default function ProfilePage() {
             <TabsTrigger value="security">Security</TabsTrigger>
           </TabsList>
 
-          {/* Profile Tab */}
           <TabsContent value="profile" className="mt-6">
             <Card>
               <CardHeader>
@@ -349,13 +368,29 @@ export default function ProfilePage() {
               <CardContent className="space-y-6">
                 <div className="flex flex-col md:flex-row gap-6">
                   <div className="flex flex-col items-center space-y-4">
-                    <Avatar className="h-32 w-32">
-                      <AvatarImage
-                        src={avatarPreview || user.avatar || "/placeholder.svg?height=128&width=128"}
-                        alt={user.name || "User"}
-                      />
-                      <AvatarFallback className="text-2xl">{user.name?.charAt(0) || "U"}</AvatarFallback>
-                    </Avatar>
+                    {avatarPreview || user.avatar ? (
+                      <div className="relative h-32 w-32 overflow-hidden rounded-full">
+                        {avatarPreview ? (
+                          <img
+                            key={avatarKey}
+                            src={avatarPreview}
+                            alt={user.name || "User"}
+                            className="h-full w-full rounded-full object-cover"
+                          />
+                        ) : (
+                          <img
+                            key={avatarKey}
+                            src={getDynamicImageUrl(user.avatar)}
+                            alt={user.name || "User"}
+                            className="h-full w-full rounded-full object-cover"
+                          />
+                        )}
+                      </div>
+                    ) : (
+                      <div className="flex h-32 w-32 items-center justify-center rounded-full bg-muted">
+                        <span className="text-2xl">{user.name?.charAt(0) || "U"}</span>
+                      </div>
+                    )}
                     <div className="space-y-2">
                       <input
                         ref={avatarInputRef}
@@ -430,10 +465,7 @@ export default function ProfilePage() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label htmlFor="activeRole">Default Role</Label>
-                        <Select
-                          value={formData.activeRole}
-                          onValueChange={handleRoleChange}
-                        >
+                        <Select value={formData.activeRole} onValueChange={handleRoleChange}>
                           <SelectTrigger id="activeRole">
                             <SelectValue placeholder="Select a role" />
                           </SelectTrigger>
@@ -445,9 +477,7 @@ export default function ProfilePage() {
                             ))}
                           </SelectContent>
                         </Select>
-                        <p className="text-xs text-gray-500">
-                          Select the default role to use when logging in
-                        </p>
+                        <p className="text-xs text-gray-500">Select the default role to use when logging in</p>
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="status">Account Status</Label>
@@ -481,7 +511,7 @@ export default function ProfilePage() {
                         {user.idCardFrontUrl ? (
                           <div className="relative h-48 w-full">
                             <Image
-                              src={user.idCardFrontUrl}
+                              src={idCardFrontUrl}
                               alt="ID Card Front"
                               fill
                               style={{ objectFit: "contain" }}
@@ -497,7 +527,7 @@ export default function ProfilePage() {
                         {user.idCardBackUrl ? (
                           <div className="relative h-48 w-full">
                             <Image
-                              src={user.idCardBackUrl}
+                              src={idCardBackUrl}
                               alt="ID Card Back"
                               fill
                               style={{ objectFit: "contain" }}
@@ -548,7 +578,6 @@ export default function ProfilePage() {
             </Card>
           </TabsContent>
 
-          {/* Account Tab */}
           <TabsContent value="account" className="mt-6">
             <Card>
               <CardHeader>
@@ -608,7 +637,6 @@ export default function ProfilePage() {
             </Card>
           </TabsContent>
 
-          {/* Security Tab */}
           <TabsContent value="security" className="mt-6">
             <Card>
               <CardHeader>
@@ -699,5 +727,5 @@ export default function ProfilePage() {
         </Tabs>
       </div>
     </ProtectedRoute>
-  )
+  );
 }

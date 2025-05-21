@@ -1,60 +1,59 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import Link from "next/link"
-import { useRouter, useSearchParams } from "next/navigation"
-import { Eye, EyeOff, Lock, Mail, AlertCircle } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Checkbox } from "@/components/ui/checkbox"
-import { ThemeToggle } from "@/components/theme-toggle"
-import { useAuth } from "@/lib/auth-context"
-import { toast } from "@/components/ui/use-toast"
+import { useState, useEffect, Suspense } from "react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Eye, EyeOff, Lock, Mail, AlertCircle } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ThemeToggle } from "@/components/theme-toggle";
+import { useAuth } from "@/lib/auth-context";
+import { toast } from "@/components/ui/use-toast";
 
-export default function LoginPage() {
-  const router = useRouter()
-  const searchParams = useSearchParams()
-  const { login } = useAuth()
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
-  const [showPassword, setShowPassword] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+function LoginForm() {
+  const router = useRouter();
+  const { login } = useAuth();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const searchParams = useSearchParams(); // Moved inside the component
 
   useEffect(() => {
-    const from = searchParams.get("from")
+    const from = searchParams.get("from");
     if (from) {
-      setError("Please log in to access that page.")
+      setError("Please log in to access that page.");
     }
-  }, [searchParams])
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    console.log("handleSubmit called with:", { email })
-    setError(null)
-    setIsLoading(true)
+    e.preventDefault();
+    console.log("handleSubmit called with:", { email });
+    setError(null);
+    setIsLoading(true);
 
-    const result = await login(email, password)
+    const result = await login(email, password);
     if (result.success) {
       toast({
         title: "Login successful",
         description: "Welcome back to AffidBlock!",
-      })
-      console.log("Redirecting to /dashboard")
-      // Redirect is handled by login() in auth-context
+      });
+      console.log("Redirecting to /dashboard");
     } else {
-      const errorMessage = result.error || "An unexpected error occurred"
-      setError(errorMessage)
+      const errorMessage = result.error || "An unexpected error occurred";
+      setError(errorMessage);
       toast({
         title: "Login Failed",
         description: errorMessage,
         variant: "destructive",
-      })
+      });
     }
-    setIsLoading(false)
-  }
+    setIsLoading(false);
+  };
 
   return (
     <div className="container flex items-center justify-center min-h-[calc(100vh-4rem)] py-12 relative">
@@ -159,5 +158,13 @@ export default function LoginPage() {
         </Card>
       </div>
     </div>
-  )
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <LoginForm />
+    </Suspense>
+  );
 }
