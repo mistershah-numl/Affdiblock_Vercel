@@ -1,15 +1,15 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import Link from "next/link"
-import { useRouter } from "next/navigation"
-import { Search, Filter, Edit, Trash2, Eye, AlertCircle, FilePlus, CheckCircle, XCircle, Download } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { useState, useEffect } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { Search, Filter, Edit, Trash2, Eye, AlertCircle, FilePlus, CheckCircle, XCircle, Download, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -17,205 +17,257 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Label } from "@/components/ui/label"
-import CreateAffidavitDialog from "@/components/create-affidavit-dialog"
-import { useAuth } from "@/lib/auth-context"
-import { toast } from "@/components/ui/use-toast"
-import { ethers } from "ethers"
+} from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Label } from "@/components/ui/label";
+import CreateAffidavitDialog from "@/components/create-affidavit-dialog";
+import { useAuth } from "@/lib/auth-context";
+import { toast } from "@/components/ui/use-toast";
+import { ethers } from "ethers";
+import { getConnectedMetaMaskWallet } from "@/lib/blockchain";
+
+// Updated ABI to reflect string[] ipfsHashes
+const AffidavitRegistryABI = {
+  abi: [
+    {
+      inputs: [
+        { internalType: "string", name: "_affidavitId", type: "string" },
+        { internalType: "string", name: "_title", type: "string" },
+        { internalType: "string", name: "_category", type: "string" },
+        { internalType: "string", name: "_description", type: "string" },
+        { internalType: "string", name: "_declaration", type: "string" },
+        { internalType: "string", name: "_issuerId", type: "string" },
+        { internalType: "string", name: "_sellerId", type: "string" },
+        { internalType: "string", name: "_buyerId", type: "string" },
+        { internalType: "string[]", name: "_witnessIds", type: "string[]" },
+        { internalType: "string[]", name: "_ipfsHashes", type: "string[]" },
+        { internalType: "string", name: "_dataHash", type: "string" },
+      ],
+      name: "createAffidavit",
+      outputs: [],
+      stateMutability: "nonpayable",
+      type: "function",
+    },
+    {
+      inputs: [],
+      name: "getAffidavitCount",
+      outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+      stateMutability: "view",
+      type: "function",
+    },
+    {
+      inputs: [{ internalType: "string", name: "_affidavitId", type: "string" }],
+      name: "getAffidavit",
+      outputs: [
+        { internalType: "string", name: "affidavitId", type: "string" },
+        { internalType: "string", name: "title", type: "string" },
+        { internalType: "string", name: "category", type: "string" },
+        { internalType: "string", name: "description", type: "string" },
+        { internalType: "string", name: "declaration", type: "string" },
+        { internalType: "string", name: "issuerId", type: "string" },
+        { internalType: "string", name: "sellerId", type: "string" },
+        { internalType: "string", name: "buyerId", type: "string" },
+        { internalType: "string[]", name: "ipfsHashes", type: "string[]" },
+        { internalType: "string", name: "dataHash", type: "string" },
+        { internalType: "uint256", name: "timestamp", type: "uint256" },
+        { internalType: "bool", name: "onBlockchain", type: "bool" },
+      ],
+      stateMutability: "view",
+      type: "function",
+    },
+    {
+      inputs: [{ internalType: "string", name: "_userId", type: "string" }],
+      name: "getUserAffidavits",
+      outputs: [{ internalType: "string[]", name: "", type: "string[]" }],
+      stateMutability: "view",
+      type: "function",
+    },
+    {
+      inputs: [{ internalType: "string", name: "_affidavitId", type: "string" }],
+      name: "getWitnesses",
+      outputs: [{ internalType: "string[]", name: "", type: "string[]" }],
+      stateMutability: "view",
+      type: "function",
+    },
+    {
+      inputs: [{ internalType: "string", name: "_affidavitId", type: "string" }],
+      name: "revokeAffidavit",
+      outputs: [],
+      stateMutability: "nonpayable",
+      type: "function",
+    },
+    {
+      inputs: [{ internalType: "string", name: "_affidavitId", type: "string" }],
+      name: "verifyAffidavit",
+      outputs: [
+        { internalType: "bool", name: "exists", type: "bool" },
+        { internalType: "bool", name: "onBlockchain", type: "bool" },
+      ],
+      stateMutability: "view",
+      type: "function",
+    },
+  ],
+};
 
 interface AffidavitRequest {
-  _id: string
-  displayId: string
-  title: string
-  category: string
-  issuerId: { _id: string; name: string; area: string; idCardNumber: string; walletAddress?: string }
-  issuerAccepted: boolean | null
-  description: string
-  declaration: string
-  userRole: string
-  sellerId?: { _id: string; name: string; idCardNumber: string; walletAddress?: string }
-  sellerAccepted: boolean | null
-  buyerId?: { _id: string; name: string; idCardNumber: string; walletAddress?: string }
-  buyerAccepted: boolean | null
-  witnesses: Array<{ contactId: { _id: string; name: string; idCardNumber: string }; hasAccepted: boolean | null }>
-  documents: Array<{ url: string; name: string; type: string }>
-  details: Record<string, string | number>
-  createdBy: { _id: string; name: string; idCardNumber: string }
-  initiatorIdCardNumber: string
-  status: string
-  createdAt: string
+  _id: string;
+  displayId: string;
+  title: string;
+  category: string;
+  issuerId: { _id: string; name: string; area: string; idCardNumber: string; walletAddress?: string };
+  issuerAccepted: boolean | null;
+  description: string;
+  declaration: string;
+  userRole: string;
+  sellerId?: { _id: string; name: string; idCardNumber: string; walletAddress?: string };
+  sellerAccepted: boolean | null;
+  buyerId?: { _id: string; name: string; idCardNumber: string; walletAddress?: string };
+  buyerAccepted: boolean | null;
+  witnesses: Array<{ contactId: { _id: string; name: string; idCardNumber: string; walletAddress?: string }; hasAccepted: boolean | null }>;
+  documents: Array<{ url: string; name: string; type: string; ipfsHash?: string }>;
+  details: Record<string, string | number>;
+  createdBy: { _id: string; name: string; idCardNumber: string };
+  initiatorIdCardNumber: string;
+  status: string;
+  createdAt: string;
 }
 
 interface Affidavit {
-  _id: string
-  displayId: string
-  title: string
-  category: string
-  issuerId: { _id: string; name: string; area: string; idCardNumber: string } | string
-  issuerName: string
-  description: string
-  declaration: string
-  dateRequested: string
-  dateIssued: string
-  status: string
-  transactionHash?: string
-  blockNumber?: number
-  createdAt: string
+  _id: string;
+  displayId: string;
+  title: string;
+  category: string;
+  issuerId: { _id: string; name: string; area: string; idCardNumber: string } | string;
+  issuerName: string;
+  description: string;
+  declaration: string;
+  dateRequested: string;
+  dateIssued: string;
+  status: string;
+  transactionHash?: string;
+  blockNumber?: number;
+  createdAt: string;
 }
 
 export default function AffidavitsPage() {
-  const router = useRouter()
-  const { user, token } = useAuth()
-  const [searchQuery, setSearchQuery] = useState("")
-  const [statusFilter, setStatusFilter] = useState("all")
-  const [categoryFilter, setCategoryFilter] = useState("all")
-  const [requestStatusFilter, setRequestStatusFilter] = useState("all")
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
-  const [isViewRequestDialogOpen, setIsViewRequestDialogOpen] = useState(false)
-  const [selectedAffidavitId, setSelectedAffidavitId] = useState<string | null>(null)
-  const [selectedAffidavitRequest, setSelectedAffidavitRequest] = useState<AffidavitRequest | null>(null)
-  const [affidavitRequests, setAffidavitRequests] = useState<AffidavitRequest[]>([])
-  const [affidavits, setAffidavits] = useState<Affidavit[]>([])
-  const [isLoadingRequests, setIsLoadingRequests] = useState(true)
-  const [isLoadingAffidavits, setIsLoadingAffidavits] = useState(true)
-  const [isProcessingBlockchain, setIsProcessingBlockchain] = useState(false)
+  const router = useRouter();
+  const { user, token } = useAuth();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [requestStatusFilter, setRequestStatusFilter] = useState("all");
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isViewRequestDialogOpen, setIsViewRequestDialogOpen] = useState(false);
+  const [selectedAffidavitId, setSelectedAffidavitId] = useState<string | null>(null);
+  const [selectedAffidavitRequest, setSelectedAffidavitRequest] = useState<AffidavitRequest | null>(null);
+  const [affidavitRequests, setAffidavitRequests] = useState<AffidavitRequest[]>([]);
+  const [affidavits, setAffidavits] = useState<Affidavit[]>([]);
+  const [isLoadingRequests, setIsLoadingRequests] = useState(true);
+  const [isLoadingAffidavits, setIsLoadingAffidavits] = useState(true);
+  const [isProcessingBlockchain, setIsProcessingBlockchain] = useState(false);
 
-  const userRole = user?.activeRole || "User"
+  const userRole = user?.activeRole || "User";
 
   useEffect(() => {
     if (user?._id) {
-      fetchAffidavitRequests()
-      fetchAffidavits()
+      fetchAffidavitRequests();
+      fetchAffidavits();
     } else {
-      setIsLoadingRequests(false)
-      setIsLoadingAffidavits(false)
-      setAffidavitRequests([])
-      setAffidavits([])
+      setIsLoadingRequests(false);
+      setIsLoadingAffidavits(false);
+      setAffidavitRequests([]);
+      setAffidavits([]);
       toast({
         title: "Error",
         description: "User not authenticated. Please log in to view affidavits.",
         variant: "destructive",
-      })
+        duration: 3000,
+      });
     }
-  }, [user?._id])
+  }, [user?._id]);
 
   const fetchAffidavitRequests = async () => {
-    setIsLoadingRequests(true)
+    setIsLoadingRequests(true);
     try {
       const response = await fetch(
         `/api/affidavits/affidavit-requests/get?userId=${user?._id}&activeRole=${userRole}`,
         {
           headers: { Authorization: `Bearer ${token}` },
-        },
-      )
+        }
+      );
       if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
+        const errorData = await response.json();
+        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
       }
-      const data = await response.json()
+      const data = await response.json();
       if (data.success) {
-        setAffidavitRequests(data.affidavitRequests || [])
+        setAffidavitRequests(data.affidavitRequests || []);
       } else {
-        setAffidavitRequests([])
-        toast({
-          title: "Error",
-          description: data.error || "Failed to fetch affidavit requests",
-          variant: "destructive",
-        })
+        setAffidavitRequests([]);
+        toast({ title: "Error", description: data.error || "Failed to fetch affidavit requests", variant: "destructive" });
       }
     } catch (error: any) {
-      console.error("Error fetching affidavit requests:", {
-        message: error.message,
-        status: error.status,
-      })
-      setAffidavitRequests([])
-      toast({
-        title: "Error",
-        description: error.message || "Failed to fetch affidavit requests. Please try again later.",
-        variant: "destructive",
-      })
+      setAffidavitRequests([]);
+      toast({ title: "Error", description: error.message || "Failed to fetch affidavit requests.", variant: "destructive" });
     } finally {
-      setIsLoadingRequests(false)
+      setIsLoadingRequests(false);
     }
-  }
+  };
 
   const fetchAffidavits = async () => {
-    setIsLoadingAffidavits(true)
+    setIsLoadingAffidavits(true);
     try {
       const response = await fetch(`/api/affidavits/get-all?userId=${user?._id}&role=${userRole}`, {
         headers: { Authorization: `Bearer ${token}` },
-      })
+      });
       if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
+        const errorData = await response.json();
+        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
       }
-      const data = await response.json()
+      const data = await response.json();
       if (data.success) {
-        setAffidavits(data.affidavits || [])
+        setAffidavits(data.affidavits || []);
       } else {
-        setAffidavits([])
-        toast({
-          title: "Error",
-          description: data.error || "Failed to fetch affidavits",
-          variant: "destructive",
-        })
+        setAffidavits([]);
+        toast({ title: "Error", description: data.error || "Failed to fetch affidavits", variant: "destructive" });
       }
     } catch (error: any) {
-      console.error("Error fetching affidavits:", {
-        message: error.message,
-        status: error.status,
-      })
-      setAffidavits([])
-      toast({
-        title: "Error",
-        description: error.message || "Failed to fetch affidavits. Please try again later.",
-        variant: "destructive",
-      })
+      setAffidavits([]);
+      toast({ title: "Error", description: error.message || "Failed to fetch affidavits.", variant: "destructive" });
     } finally {
-      setIsLoadingAffidavits(false)
+      setIsLoadingAffidavits(false);
     }
-  }
+  };
 
   const getStatusBadge = (status: string) => {
     switch (status.toLowerCase()) {
       case "active":
       case "accepted":
-        return <Badge className="bg-green-500 text-white">Accepted</Badge>
+        return <Badge className="bg-green-500 text-white">Accepted</Badge>;
       case "pending":
-        return (
-          <Badge variant="outline" className="text-orange-500 border-orange-500">
-            Pending
-          </Badge>
-        )
+        return <Badge variant="outline" className="text-orange-500 border-orange-500">Pending</Badge>;
       case "rejected":
-        return <Badge variant="destructive">Rejected</Badge>
+        return <Badge variant="destructive">Rejected</Badge>;
       case "revoked":
-        return (
-          <Badge variant="secondary" className="bg-gray-500 text-white">
-            Revoked
-          </Badge>
-        )
+        return <Badge variant="secondary" className="bg-gray-500 text-white">Revoked</Badge>;
       default:
-        return <Badge variant="secondary">{status}</Badge>
+        return <Badge variant="secondary">{status}</Badge>;
     }
-  }
+  };
 
   const filteredAffidavits = affidavits.filter((affidavit) => {
     const matchesSearch =
       affidavit.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       affidavit.displayId?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       affidavit.issuerName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      affidavit.category?.toLowerCase().includes(searchQuery.toLowerCase())
+      affidavit.category?.toLowerCase().includes(searchQuery.toLowerCase());
 
-    const matchesStatus = statusFilter === "all" || affidavit.status?.toLowerCase() === statusFilter.toLowerCase()
-    const matchesCategory =
-      categoryFilter === "all" || affidavit.category?.toLowerCase() === categoryFilter.toLowerCase()
+    const matchesStatus = statusFilter === "all" || affidavit.status?.toLowerCase() === statusFilter.toLowerCase();
+    const matchesCategory = categoryFilter === "all" || affidavit.category?.toLowerCase() === categoryFilter.toLowerCase();
 
-    return matchesSearch && matchesStatus && matchesCategory
-  })
+    return matchesSearch && matchesStatus && matchesCategory;
+  });
 
   const filteredAffidavitRequests = affidavitRequests.filter((request) => {
     const matchesSearch =
@@ -225,68 +277,68 @@ export default function AffidavitsPage() {
       request.issuerId.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (request.sellerId?.name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
       (request.buyerId?.name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-      request.witnesses.some((w) => w.contactId.name.toLowerCase().includes(searchQuery.toLowerCase()))
+      request.witnesses.some((w) => w.contactId.name.toLowerCase().includes(searchQuery.toLowerCase()));
 
-    const matchesStatus =
-      requestStatusFilter === "all" || request.status.toLowerCase() === requestStatusFilter.toLowerCase()
+    const matchesStatus = requestStatusFilter === "all" || request.status.toLowerCase() === requestStatusFilter.toLowerCase();
 
-    return matchesSearch && matchesStatus
-  })
+    return matchesSearch && matchesStatus;
+  });
 
   const handleDeleteClick = (id: string) => {
-    setSelectedAffidavitId(id)
-    setIsDeleteDialogOpen(true)
-  }
+    setSelectedAffidavitId(id);
+    setIsDeleteDialogOpen(true);
+  };
 
   const handleDeleteConfirm = async () => {
-    if (!selectedAffidavitId) return
+    if (!selectedAffidavitId) return;
 
     try {
       const response = await fetch(`/api/affidavits/delete?id=${selectedAffidavitId}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
-      })
+      });
 
-      const data = await response.json()
+      const data = await response.json();
 
       if (data.success) {
-        toast({
-          title: "Success",
-          description: "Affidavit deleted successfully",
-        })
-        fetchAffidavits()
+        toast({ title: "Success", description: "Affidavit deleted successfully" });
+        fetchAffidavits();
       } else {
-        toast({
-          title: "Error",
-          description: data.error || "Failed to delete affidavit",
-          variant: "destructive",
-        })
+        toast({ title: "Error", description: data.error || "Failed to delete affidavit", variant: "destructive" });
       }
     } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "An error occurred while deleting the affidavit",
-        variant: "destructive",
-      })
+      toast({ title: "Error", description: error.message || "An error occurred while deleting the affidavit", variant: "destructive" });
     }
 
-    setIsDeleteDialogOpen(false)
-    setSelectedAffidavitId(null)
-  }
+    setIsDeleteDialogOpen(false);
+    setSelectedAffidavitId(null);
+  };
 
   const handleViewRequest = (request: AffidavitRequest) => {
-    setSelectedAffidavitRequest(request)
-    setIsViewRequestDialogOpen(true)
-  }
+    setSelectedAffidavitRequest(request);
+    setIsViewRequestDialogOpen(true);
+  };
 
   const handleRespondRequest = async (action: "accept" | "reject") => {
-    if (!selectedAffidavitRequest || !user?._id) return
+    if (!selectedAffidavitRequest || !user?._id) {
+      toast({
+        title: "Error",
+        description: "No affidavit request selected or user not authenticated",
+        variant: "destructive",
+        duration: 5000,
+      });
+      return;
+    }
+
+    const isAccepted = action === "accept";
 
     try {
-      const isAccepted = action === "accept"
-
-      // For non-issuer roles or reject action, just update the request status
-      if (user.activeRole !== "Issuer" || !isAccepted || selectedAffidavitRequest.issuerId._id !== user._id) {
+      // Handle non-issuer or rejection logic
+      if (
+        user.activeRole !== "Issuer" ||
+        !isAccepted ||
+        selectedAffidavitRequest.issuerId._id !== user._id
+      ) {
         const response = await fetch("/api/affidavits/affidavit-requests/respond", {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -296,170 +348,217 @@ export default function AffidavitsPage() {
             activeRole: user.activeRole,
             action,
           }),
-        })
+        });
 
-        const result = await response.json()
+        const result = await response.json();
         if (!response.ok || !result.success) {
-          throw new Error(result.error || `Failed to ${action} the request`)
+          throw new Error(result.error || `Failed to ${action} the request`);
         }
 
         toast({
           title: "Success",
           description: `Successfully ${action}ed the affidavit request`,
           variant: "default",
-        })
+        });
 
-        // Update local state
         setAffidavitRequests((prev) =>
           prev.map((req) =>
-            req._id === selectedAffidavitRequest._id ? { ...req, status: isAccepted ? "accepted" : "rejected" } : req,
-          ),
-        )
+            req._id === selectedAffidavitRequest._id
+              ? { ...req, status: isAccepted ? "accepted" : "rejected" }
+              : req
+          )
+        );
 
-        await Promise.all([fetchAffidavitRequests(), fetchAffidavits()])
-        setIsViewRequestDialogOpen(false)
-        return
+        await Promise.all([fetchAffidavitRequests(), fetchAffidavits()]);
+        setIsViewRequestDialogOpen(false);
+        return;
       }
 
-      // For issuer accepting, handle the blockchain transaction
-      setIsProcessingBlockchain(true)
-
-      // Step 1: Create the affidavit in the database (without blockchain details)
-      toast({
-        title: "Processing",
-        description: "Creating affidavit record...",
-        duration: 3000,
-      })
-
-      const initialResponse = await fetch("/api/affidavits/affidavit-requests/respond", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          requestId: selectedAffidavitRequest._id,
-          userId: user._id,
-          activeRole: user.activeRole,
-          action,
-        }),
-      })
-
-      const initialResult = await initialResponse.json()
-      if (!initialResponse.ok || !initialResult.success) {
-        throw new Error(initialResult.error || `Failed to ${action} the request`)
-      }
-
-      const affidavitData = initialResult.affidavitData
-      if (!affidavitData) {
-        throw new Error("Affidavit data not returned from API")
-      }
-
-      // Step 2: Deploy to blockchain
-      toast({
-        title: "Processing",
-        description: "Deploying to blockchain. Please confirm the transaction in MetaMask...",
-        duration: 5000,
-      })
-
+      // Issuer-specific logic for blockchain deployment
       if (!window.ethereum) {
-        throw new Error("MetaMask is not installed or not running in a browser environment")
+        throw new Error("MetaMask is not installed. Please install MetaMask and try again.");
       }
 
-      const provider = new ethers.BrowserProvider(window.ethereum)
-      await window.ethereum.request({ method: "eth_requestAccounts" })
-      const signer = await provider.getSigner()
-      const contractAddress = "0x2444c02943aA4f09D2C63D607f82668413F713d6"
-      const contract = new ethers.Contract(
-        contractAddress,
-        [
-          "function createAffidavit(string memory _affidavitId, string memory _title, string memory _category, string memory _description, string memory _declaration, address _issuer, address _seller, address _buyer, string[] memory _witnessIds, string memory _ipfsHash) public",
-        ],
-        signer,
-      )
+      // Fetch issuer wallet
+      const issuerResponse = await fetch(`/api/user`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const issuerData = await issuerResponse.json();
+      if (!issuerData.success || !issuerData.currentUser) {
+        throw new Error("Failed to fetch issuer data");
+      }
+      const issuerWallet = issuerData.currentUser.walletAddress;
+      if (!issuerWallet) {
+        throw new Error("Issuer wallet address is not set. Please connect your blockchain wallet.");
+      }
 
-      // Since the contract expects addresses but we only store ID card numbers, pass zero addresses
-      const zeroAddress = "0x0000000000000000000000000000000000000000"
-      const witnessIds = affidavitData.witnessIds.length > 0 ? affidavitData.witnessIds : ["0"]
-      const ipfsHash = affidavitData.ipfsHash || ""
+      // Verify MetaMask wallet
+      const connectedWallet = await getConnectedMetaMaskWallet();
+      if (!connectedWallet || connectedWallet.toLowerCase() !== issuerWallet.toLowerCase()) {
+        throw new Error(`Please connect MetaMask with address ${issuerWallet}.`);
+      }
+
+      setIsProcessingBlockchain(true);
+      toast({
+        title: "Connecting to MetaMask",
+        description: "Please connect your wallet in MetaMask...",
+        duration: 5000,
+      });
+
+      // Initialize ethers provider and signer
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      await window.ethereum.request({ method: "eth_requestAccounts" });
+      const signer = await provider.getSigner();
+      const contractAddress = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || "0xED7864989c1f88481C5Ac0242F263DC4CE2D427d";
+
+      if (!contractAddress) {
+        throw new Error("Contract address not set in environment variables.");
+      }
+
+      // Verify network
+      const network = await provider.getNetwork();
+      const expectedChainId = 1337; // Ganache chain ID
+      if (Number(network.chainId) !== expectedChainId) {
+        try {
+          await window.ethereum.request({
+            method: "wallet_switchEthereumChain",
+            params: [{ chainId: `0x${expectedChainId.toString(16)}` }],
+          });
+        } catch (switchError: any) {
+          if (switchError.code === 4902) {
+            throw new Error(
+              `Ganache network (Chain ID: ${expectedChainId}) not added to MetaMask. Please add it manually.`
+            );
+          }
+          throw new Error(`Failed to switch to Ganache network: ${switchError.message}`);
+        }
+      }
+
+      // Initialize contract
+      let contract;
+      try {
+        contract = new ethers.Contract(contractAddress, AffidavitRegistryABI.abi, signer);
+
+        // Verify contract deployment
+        const code = await provider.getCode(contractAddress);
+        if (code === "0x") {
+          throw new Error(`No contract deployed at address ${contractAddress}`);
+        }
+
+        // Test contract interaction
+        const affidavitCount = await contract.getAffidavitCount();
+        console.log("Current affidavit count:", affidavitCount.toString());
+      } catch (error: any) {
+        console.error("Contract initialization error:", error);
+        throw new Error(`Failed to initialize contract at ${contractAddress}: ${error.message}`);
+      }
+
+      toast({
+        title: "Processing Transaction",
+        description: "Please confirm the transaction in MetaMask...",
+        duration: 10000,
+      });
+
+      // Prepare transaction data
+      const displayId = `AFF-${new Date().getFullYear()}-${Math.floor(10000 + Math.random() * 90000)}`;
+      const ipfsHashes = selectedAffidavitRequest.documents.map((doc) => doc.ipfsHash || "");
+      const witnessIds = selectedAffidavitRequest.witnesses.length > 0
+        ? selectedAffidavitRequest.witnesses.map((w) => w.contactId._id.toString())
+        : ["0"];
+
+      const affidavitDataForHash = {
+        displayId,
+        title: selectedAffidavitRequest.title,
+        category: selectedAffidavitRequest.category,
+        description: selectedAffidavitRequest.description,
+        declaration: selectedAffidavitRequest.declaration,
+        issuerId: selectedAffidavitRequest.issuerId._id.toString(),
+        issuerName: selectedAffidavitRequest.issuerId.name,
+        issuerIdCardNumber: selectedAffidavitRequest.issuerId.idCardNumber,
+        issuerWalletAddress: selectedAffidavitRequest.issuerId.walletAddress || "",
+        sellerId: selectedAffidavitRequest.sellerId?._id.toString() || "",
+        sellerName: selectedAffidavitRequest.sellerId?.name || "",
+        sellerIdCardNumber: selectedAffidavitRequest.sellerId?.idCardNumber || "",
+        sellerWalletAddress: selectedAffidavitRequest.sellerId?.walletAddress || "",
+        buyerId: selectedAffidavitRequest.buyerId?._id.toString() || "",
+        buyerName: selectedAffidavitRequest.buyerId?.name || "",
+        buyerIdCardNumber: selectedAffidavitRequest.buyerId?.idCardNumber || "",
+        buyerWalletAddress: selectedAffidavitRequest.buyerId?.walletAddress || "",
+        witnesses: selectedAffidavitRequest.witnesses.map((w) => ({
+          contactId: w.contactId._id.toString(),
+          name: w.contactId.name,
+          idCardNumber: w.contactId.idCardNumber,
+          walletAddress: w.contactId.walletAddress || "",
+        })),
+        documents: selectedAffidavitRequest.documents,
+        status: "Active",
+        dateRequested: selectedAffidavitRequest.createdAt,
+        dateIssued: new Date().toISOString(),
+        requestId: selectedAffidavitRequest._id,
+        createdBy: selectedAffidavitRequest.createdBy._id,
+      };
+
+      const dataHash = ethers.keccak256(ethers.toUtf8Bytes(JSON.stringify(affidavitDataForHash)));
 
       console.log("Blockchain Deployment Data:", {
-        affidavitId: affidavitData.affidavitId,
-        title: affidavitData.title,
-        category: affidavitData.category,
-        description: affidavitData.description,
-        declaration: affidavitData.declaration,
-        issuer: zeroAddress,
-        seller: zeroAddress,
-        buyer: zeroAddress,
+        affidavitId: displayId,
+        title: selectedAffidavitRequest.title,
+        category: selectedAffidavitRequest.category,
+        description: selectedAffidavitRequest.description,
+        declaration: selectedAffidavitRequest.declaration,
+        issuerId: selectedAffidavitRequest.issuerId._id.toString(),
+        sellerId: selectedAffidavitRequest.sellerId?._id.toString() || "",
+        buyerId: selectedAffidavitRequest.buyerId?._id.toString() || "",
         witnessIds,
-        ipfsHash,
-      })
+        ipfsHashes,
+        dataHash,
+      });
 
-      const gasEstimate = await contract.createAffidavit
-        .estimateGas(
-          affidavitData.affidavitId,
-          affidavitData.title,
-          affidavitData.category,
-          affidavitData.description,
-          affidavitData.declaration,
-          zeroAddress, // issuer
-          zeroAddress, // seller
-          zeroAddress, // buyer
+      // Execute transaction
+      let tx;
+      try {
+        tx = await contract.createAffidavit(
+          displayId,
+          selectedAffidavitRequest.title,
+          selectedAffidavitRequest.category,
+          selectedAffidavitRequest.description,
+          selectedAffidavitRequest.declaration,
+          selectedAffidavitRequest.issuerId._id.toString(),
+          selectedAffidavitRequest.sellerId?._id.toString() || "",
+          selectedAffidavitRequest.buyerId?._id.toString() || "",
           witnessIds,
-          ipfsHash,
-          { from: await signer.getAddress() },
-        )
-        .catch((err: any) => {
-          console.error("Gas estimation failed:", err)
-          throw new Error("Gas estimation failed: " + err.message)
-        })
-
-      const gasLimit = Math.floor(Number(gasEstimate) * 1.2)
-
-      toast({
-        title: "Processing",
-        description: "Sending transaction to blockchain...",
-        duration: 5000,
-      })
-
-      const tx = await contract.createAffidavit(
-        affidavitData.affidavitId,
-        affidavitData.title,
-        affidavitData.category,
-        affidavitData.description,
-        affidavitData.declaration,
-        zeroAddress, // issuer
-        zeroAddress, // seller
-        zeroAddress, // buyer
-        witnessIds,
-        ipfsHash,
-        { gasLimit },
-      )
-
-      console.log("Transaction sent, hash:", tx.hash)
-
-      toast({
-        title: "Processing",
-        description: "Transaction sent. Waiting for confirmation...",
-        duration: 10000,
-      })
-
-      // Step 3: Wait for transaction confirmation
-      const receipt = await tx.wait(1)
-      console.log("Transaction confirmed:", receipt)
-
-      if (!receipt || !receipt.hash) {
-        throw new Error("Failed to get transaction receipt")
+          ipfsHashes,
+          dataHash
+        );
+        console.log("Transaction sent, hash:", tx.hash);
+      } catch (err: any) {
+        console.error("Transaction error:", err);
+        throw new Error(`Transaction failed: ${err.message || err.reason || "Unknown error"}`);
       }
 
-      const transactionHash = receipt.hash
-      const blockNumber = Number(receipt.blockNumber)
-
-      // Step 4: Update the affidavit with blockchain details
       toast({
-        title: "Processing",
-        description: "Updating affidavit with blockchain details...",
-        duration: 3000,
-      })
+        title: "Transaction Sent",
+        description: "Waiting for confirmation...",
+        duration: 10000,
+      });
 
+      const receipt = await tx.wait();
+      console.log("Transaction confirmed:", receipt);
+
+      if (!receipt || !receipt.hash) {
+        throw new Error("Failed to get transaction receipt");
+      }
+
+      const transactionHash = receipt.hash;
+      const blockNumber = Number(receipt.blockNumber);
+
+      toast({
+        title: "Updating Affidavit",
+        description: "Saving blockchain details...",
+        duration: 5000,
+      });
+
+      // Update backend
       const updateResponse = await fetch("/api/affidavits/affidavit-requests/respond", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -470,92 +569,100 @@ export default function AffidavitsPage() {
           action,
           transactionHash,
           blockNumber,
-          affidavitId: affidavitData.affidavitId,
+          displayId,
         }),
-      })
+      });
 
-      const updateResult = await updateResponse.json()
+      const updateResult = await updateResponse.json();
       if (!updateResponse.ok || !updateResult.success) {
-        console.error("Failed to update blockchain details:", updateResult)
-        throw new Error("Transaction confirmed, but failed to update affidavit with blockchain details")
+        throw new Error(`Failed to update affidavit: ${updateResult.error || "Unknown error"}`);
       }
 
-      // Update local state
       setAffidavitRequests((prev) =>
         prev.map((req) =>
-          req._id === selectedAffidavitRequest._id ? { ...req, status: "accepted", issuerAccepted: true } : req,
-        ),
-      )
+          req._id === selectedAffidavitRequest._id
+            ? { ...req, status: "accepted", issuerAccepted: true }
+            : req
+        )
+      );
 
       toast({
         title: "Success",
         description: "Affidavit accepted and deployed to blockchain successfully",
         variant: "default",
-      })
+      });
 
-      await Promise.all([fetchAffidavitRequests(), fetchAffidavits()])
-      setIsViewRequestDialogOpen(false)
+      await Promise.all([fetchAffidavitRequests(), fetchAffidavits()]);
+      setIsViewRequestDialogOpen(false);
     } catch (error: any) {
-      console.error(`Error ${action}ing request:`, error)
+      console.error("Error in handleRespondRequest:", error);
       toast({
         title: "Error",
-        description: `Transaction failed: ${error.message || "Unknown error"}`,
+        description: error.message || "Failed to process the transaction",
         variant: "destructive",
-      })
+        duration: 5000,
+      });
+
+      // Ensure affidavit request remains in pending status
+      if (
+        isAccepted &&
+        user.activeRole === "Issuer" &&
+        selectedAffidavitRequest.issuerId._id === user._id
+      ) {
+        setAffidavitRequests((prev) =>
+          prev.map((req) =>
+            req._id === selectedAffidavitRequest._id
+              ? { ...req, status: "pending", issuerAccepted: null }
+              : req
+          )
+        );
+      }
     } finally {
-      setIsProcessingBlockchain(false)
+      setIsProcessingBlockchain(false);
     }
-  }
+  };
 
   const handleViewProfile = async (idCard: string) => {
     try {
       const response = await fetch(`/api/user?filter=idCardNumber:${idCard}`, {
         headers: { Authorization: `Bearer ${token}` },
-      })
-      const data = await response.json()
+      });
+      const data = await response.json();
       if (data.success && data.users.length > 0) {
-        router.push(`/dashboard/users/${data.users[0]._id}`)
+        router.push(`/dashboard/users/${data.users[0]._id}`);
       } else {
-        toast({
-          title: "Error",
-          description: "User not found",
-          variant: "destructive",
-        })
+        toast({ title: "Error", description: "User not found", variant: "destructive" });
       }
     } catch (error: any) {
-      toast({
-        title: "Error",
-        description: "Failed to fetch user profile",
-        variant: "destructive",
-      })
+      toast({ title: "Error", description: "Failed to fetch user profile", variant: "destructive" });
     }
-  }
+  };
 
   const hasUserResponded = (request: AffidavitRequest) => {
-    if (!user) return false
-    if (request.issuerId._id === user._id && request.issuerAccepted !== null) return true
-    if (request.sellerId && request.sellerId._id === user._id && request.sellerAccepted !== null) return true
-    if (request.buyerId && request.buyerId._id === user._id && request.buyerAccepted !== null) return true
-    const witness = request.witnesses.find((w) => w.contactId._id === user._id)
-    return witness ? witness.hasAccepted !== null : false
-  }
+    if (!user) return false;
+    if (request.issuerId._id === user._id && request.issuerAccepted !== null) return true;
+    if (request.sellerId && request.sellerId._id === user._id && request.sellerAccepted !== null) return true;
+    if (request.buyerId && request.buyerId._id === user._id && request.buyerAccepted !== null) return true;
+    const witness = request.witnesses.find((w) => w.contactId._id === user._id);
+    return witness ? witness.hasAccepted !== null : false;
+  };
 
   const isInitiator = (request: AffidavitRequest) => {
-    if (!user) return false
-    return request.createdBy._id === user._id
-  }
+    if (!user) return false;
+    return request.createdBy._id === user._id;
+  };
 
   const allNonIssuersAccepted = (request: AffidavitRequest) => {
-    const sellerAccepted = request.sellerId ? request.sellerAccepted === true : true
-    const buyerAccepted = request.buyerId ? request.buyerAccepted === true : true
+    const sellerAccepted = request.sellerId ? request.sellerAccepted === true : true;
+    const buyerAccepted = request.buyerId ? request.buyerAccepted === true : true;
     const witnessesAccepted =
-      request.witnesses.length > 0 ? request.witnesses.every((w) => w.hasAccepted === true) : true
-    return sellerAccepted && buyerAccepted && witnessesAccepted
-  }
+      request.witnesses.length > 0 ? request.witnesses.every((w) => w.hasAccepted === true) : true;
+    return sellerAccepted && buyerAccepted && witnessesAccepted;
+  };
 
   const isImageFile = (type: string) => {
-    return type.startsWith("image/")
-  }
+    return type.startsWith("image/");
+  };
 
   const renderAffidavitRequestsTable = () => (
     <Card>
@@ -649,7 +756,7 @@ export default function AffidavitsPage() {
         </Table>
       </CardContent>
     </Card>
-  )
+  );
 
   const renderAffidavitsTable = () => (
     <Card>
@@ -659,8 +766,8 @@ export default function AffidavitsPage() {
           {userRole === "Admin"
             ? "View and manage all affidavits"
             : userRole === "Issuer"
-              ? "Manage your issued affidavits"
-              : "View your affidavits"}
+            ? "Manage your issued affidavits"
+            : "View your affidavits"}
         </CardDescription>
         <div className="flex flex-col md:flex-row gap-4 mt-4">
           <div className="relative flex-1">
@@ -784,7 +891,7 @@ export default function AffidavitsPage() {
         </Table>
       </CardContent>
     </Card>
-  )
+  );
 
   return (
     <div className="flex flex-col gap-6 p-6">
@@ -813,22 +920,31 @@ export default function AffidavitsPage() {
           </TabsList>
 
           <TabsContent value="affidavits">{renderAffidavitsTable()}</TabsContent>
-
           <TabsContent value="affidavit-requests">{renderAffidavitRequestsTable()}</TabsContent>
         </Tabs>
       )}
 
-      <CreateAffidavitDialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen} />
+      <CreateAffidavitDialog
+        open={isCreateDialogOpen}
+        onOpenChange={setIsCreateDialogOpen}
+        onSuccess={() => {
+          fetchAffidavitRequests();
+          toast({
+            title: "Success",
+            description: "Affidavit request created successfully",
+          });
+        }}
+      />
 
       <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>Delete Affidavit</DialogTitle>
             <DialogDescription>
               Are you sure you want to delete this affidavit? This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter className="flex flex-col-reverse sm:flex-row sm:justify-center sm:space-x-2">
+          <DialogFooter>
             <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>
               Cancel
             </Button>
@@ -884,8 +1000,7 @@ export default function AffidavitsPage() {
                       className="text-sm text-gray-700 cursor-pointer"
                       onClick={() => handleViewProfile(selectedAffidavitRequest.initiatorIdCardNumber)}
                     >
-                      {selectedAffidavitRequest.createdBy.name} (ID Card:{" "}
-                      {selectedAffidavitRequest.initiatorIdCardNumber})
+                      {selectedAffidavitRequest.createdBy.name} (ID Card: {selectedAffidavitRequest.initiatorIdCardNumber})
                     </p>
                   </div>
                   <div>
@@ -894,9 +1009,7 @@ export default function AffidavitsPage() {
                       className="text-sm text-gray-700 cursor-pointer"
                       onClick={() => handleViewProfile(selectedAffidavitRequest.issuerId.idCardNumber)}
                     >
-                      {selectedAffidavitRequest.issuerId.name} (ID Card:{" "}
-                      {selectedAffidavitRequest.issuerId.idCardNumber}, Area:{" "}
-                      {selectedAffidavitRequest.issuerId.area || "N/A"})
+                      {selectedAffidavitRequest.issuerId.name} (ID Card: {selectedAffidavitRequest.issuerId.idCardNumber}, Area: {selectedAffidavitRequest.issuerId.area || "N/A"})
                       {selectedAffidavitRequest.issuerAccepted === true ? (
                         <CheckCircle className="inline-block h-4 w-4 ml-2 text-green-500" />
                       ) : selectedAffidavitRequest.issuerAccepted === false ? (
@@ -913,8 +1026,7 @@ export default function AffidavitsPage() {
                         className="text-sm text-gray-700 cursor-pointer"
                         onClick={() => handleViewProfile(selectedAffidavitRequest.sellerId.idCardNumber)}
                       >
-                        {selectedAffidavitRequest.sellerId.name} (ID Card:{" "}
-                        {selectedAffidavitRequest.sellerId.idCardNumber})
+                        {selectedAffidavitRequest.sellerId.name} (ID Card: {selectedAffidavitRequest.sellerId.idCardNumber})
                         {selectedAffidavitRequest.sellerAccepted === true ? (
                           <CheckCircle className="inline-block h-4 w-4 ml-2 text-green-500" />
                         ) : selectedAffidavitRequest.sellerAccepted === false ? (
@@ -932,8 +1044,7 @@ export default function AffidavitsPage() {
                         className="text-sm text-gray-700 cursor-pointer"
                         onClick={() => handleViewProfile(selectedAffidavitRequest.buyerId.idCardNumber)}
                       >
-                        {selectedAffidavitRequest.buyerId.name} (ID Card:{" "}
-                        {selectedAffidavitRequest.buyerId.idCardNumber})
+                        {selectedAffidavitRequest.buyerId.name} (ID Card: {selectedAffidavitRequest.buyerId.idCardNumber})
                         {selectedAffidavitRequest.buyerAccepted === true ? (
                           <CheckCircle className="inline-block h-4 w-4 ml-2 text-green-500" />
                         ) : selectedAffidavitRequest.buyerAccepted === false ? (
@@ -1001,6 +1112,9 @@ export default function AffidavitsPage() {
                             Download {doc.name} ({doc.type})
                           </a>
                         )}
+                        {doc.ipfsHash && (
+                          <p className="text-xs text-gray-500">IPFS: {doc.ipfsHash.slice(0, 10)}...</p>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -1016,7 +1130,11 @@ export default function AffidavitsPage() {
             </div>
           )}
           <DialogFooter className="flex flex-col sm:flex-row sm:justify-center sm:space-x-2 mt-4">
-            <Button variant="outline" onClick={() => setIsViewRequestDialogOpen(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setIsViewRequestDialogOpen(false)}
+              disabled={isProcessingBlockchain}
+            >
               Close
             </Button>
             {selectedAffidavitRequest &&
@@ -1025,41 +1143,47 @@ export default function AffidavitsPage() {
               !isInitiator(selectedAffidavitRequest) &&
               !isProcessingBlockchain &&
               (userRole === "Issuer" && selectedAffidavitRequest.issuerId._id === user._id ? (
-                allNonIssuersAccepted(selectedAffidavitRequest) ? (
+                allNonIssuersAccepted(selectedAffidavitRequest) && selectedAffidavitRequest.status === "pending" ? (
                   <>
                     <Button
                       onClick={() => handleRespondRequest("accept")}
                       className="bg-green-500 hover:bg-green-600 text-white"
+                      disabled={isProcessingBlockchain}
+                    >
+                      Accept and Deploy to Blockchain
+                    </Button>
+                    <Button
+                      onClick={() => handleRespondRequest("reject")}
+                      className="bg-red-500 hover:bg-red-600 text-white"
+                      disabled={isProcessingBlockchain}
+                    >
+                      Reject
+                    </Button>
+                  </>
+                ) : (
+                  <p className="text-red-500 text-sm mt-2">
+                    You can only accept if all parties accept this affidavit.
+                  </p>
+                )
+              ) : (
+                selectedAffidavitRequest.status === "pending" && (
+                  <>
+                    <Button
+                      onClick={() => handleRespondRequest("accept")}
+                      className="bg-green-500 hover:bg-green-600 text-white"
+                      disabled={isProcessingBlockchain}
                     >
                       Accept
                     </Button>
                     <Button
                       onClick={() => handleRespondRequest("reject")}
                       className="bg-red-500 hover:bg-red-600 text-white"
+                      disabled={isProcessingBlockchain}
                     >
                       Reject
                     </Button>
                   </>
-                ) : (
-                  <p className="text-red-500 text-sm mt-2">You can only accept if all parties accept this affidavit.</p>
                 )
-              ) : (
-                <>
-                  <Button
-                    onClick={() => handleRespondRequest("accept")}
-                    className="bg-green-500 hover:bg-green-600 text-white"
-                    disabled={isProcessingBlockchain}
-                  >
-                    Accept
-                  </Button>
-                  <Button
-                    onClick={() => handleRespondRequest("reject")}
-                    className="bg-red-500 hover:bg-red-600 text-white"
-                    disabled={isProcessingBlockchain}
-                  >
-                    Reject
-                  </Button>
-                </>
               ))}
             {isProcessingBlockchain && (
               <p className="text-blue-500 text-sm mt-2">Processing blockchain transaction. Please wait...</p>
@@ -1068,5 +1192,5 @@ export default function AffidavitsPage() {
         </DialogContent>
       </Dialog>
     </div>
-  )
+  );
 }

@@ -1,20 +1,27 @@
-const hre = require("hardhat")
+const hre = require("hardhat");
 
 async function main() {
-  console.log("Deploying AffidavitRegistry contract...")
+  console.log("Deploying AffidavitRegistry contract...");
 
-  const AffidavitRegistry = await hre.ethers.getContractFactory("AffidavitRegistry")
-  const affidavitRegistry = await AffidavitRegistry.deploy()
+  // Get the contract factory
+  const AffidavitRegistry = await hre.ethers.getContractFactory("AffidavitRegistry");
 
-  await affidavitRegistry.deployed()
+  // Deploy the contract
+  const affidavitRegistry = await AffidavitRegistry.deploy();
 
-  console.log("AffidavitRegistry deployed to:", affidavitRegistry.address)
-  console.log("Add this address to your .env file as NEXT_PUBLIC_CONTRACT_ADDRESS")
+  // Wait for the contract to be mined (no need for .deployed())
+  await affidavitRegistry.waitForDeployment();
+
+  // Get the deployed contract address
+  const contractAddress = await affidavitRegistry.getAddress();
+
+  console.log("AffidavitRegistry deployed to:", contractAddress);
+  console.log("Add this address to your .env file as NEXT_PUBLIC_CONTRACT_ADDRESS");
 }
 
 main()
   .then(() => process.exit(0))
   .catch((error) => {
-    console.error(error)
-    process.exit(1)
-  })
+    console.error(error);
+    process.exit(1);
+  });

@@ -1,42 +1,46 @@
-import mongoose, { Schema, type Document, type Model } from "mongoose"
+import mongoose, { Schema, type Document, type Model } from "mongoose";
 
 export interface IAffidavit extends Document {
-  displayId: string
-  title: string
-  category: string
-  description: string
-  declaration: string
-  issuerId: mongoose.Types.ObjectId
-  issuerName: string
-  issuerIdCardNumber: string
-  sellerId?: mongoose.Types.ObjectId
-  sellerName?: string
-  sellerIdCardNumber?: string
-  buyerId?: mongoose.Types.ObjectId
-  buyerName?: string
-  buyerIdCardNumber?: string
-  witnesses: Array<{
-    contactId: mongoose.Types.ObjectId
-    name: string
-    idCardNumber: string
-  }>
-  documents: Array<{
-    url: string
-    name: string
-    type: string
-    ipfsHash?: string
-  }>
-  details: Record<string, any>
-  status: string
-  dateRequested: Date
-  dateIssued: Date
-  requestId: mongoose.Types.ObjectId
-  createdBy: mongoose.Types.ObjectId
-  transactionHash?: string
-  blockNumber?: number
-  ipfsHash?: string
-  isVerifiedOnBlockchain?: boolean
-  lastVerifiedAt?: Date
+  displayId: string;
+  title: string;
+  category: string;
+  description: string;
+  declaration: string;
+  issuerId: mongoose.Types.ObjectId;
+  issuerName: string;
+  issuerIdCardNumber: string;
+  issuerWalletAddress?: string; // Stored in MongoDB, not blockchain
+  sellerId?: mongoose.Types.ObjectId;
+  sellerName?: string;
+  sellerIdCardNumber?: string;
+  sellerWalletAddress?: string; // Stored in MongoDB, not blockchain
+  buyerId?: mongoose.Types.ObjectId;
+  buyerName?: string;
+  buyerIdCardNumber?: string;
+  buyerWalletAddress?: string; // Stored in MongoDB, not blockchain
+  witnesses?: Array<{
+    contactId: mongoose.Types.ObjectId;
+    name: string;
+    idCardNumber: string;
+    walletAddress?: string;
+  }>;
+  documents?: Array<{
+    url: string;
+    name: string;
+    type: string;
+    ipfsHash?: string;
+  }>;
+  details: Record<string, any>;
+  status: string;
+  dateRequested: Date;
+  dateIssued: Date;
+  requestId: mongoose.Types.ObjectId;
+  createdBy: mongoose.Types.ObjectId;
+  transactionHash?: string;
+  blockNumber?: number;
+  dataHash?: string;
+  isVerifiedOnBlockchain?: boolean;
+  lastVerifiedAt?: Date;
 }
 
 const affidavitSchema: Schema<IAffidavit> = new Schema(
@@ -49,17 +53,21 @@ const affidavitSchema: Schema<IAffidavit> = new Schema(
     issuerId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     issuerName: { type: String, required: true },
     issuerIdCardNumber: { type: String, required: true },
-    sellerId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
-    sellerName: { type: String },
-    sellerIdCardNumber: { type: String },
-    buyerId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
-    buyerName: { type: String },
-    buyerIdCardNumber: { type: String },
+    issuerWalletAddress: { type: String, required: false }, // Optional, stored in MongoDB
+    sellerId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: false },
+    sellerName: { type: String, required: false },
+    sellerIdCardNumber: { type: String, required: false },
+    sellerWalletAddress: { type: String, required: false }, // Optional, stored in MongoDB
+    buyerId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: false },
+    buyerName: { type: String, required: false },
+    buyerIdCardNumber: { type: String, required: false },
+    buyerWalletAddress: { type: String, required: false }, // Optional, stored in MongoDB
     witnesses: [
       {
-        contactId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+        contactId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
         name: { type: String, required: true },
         idCardNumber: { type: String, required: true },
+        walletAddress: { type: String, required: false },
       },
     ],
     documents: [
@@ -67,47 +75,51 @@ const affidavitSchema: Schema<IAffidavit> = new Schema(
         url: { type: String, required: true },
         name: { type: String, required: true },
         type: { type: String, required: true },
-        ipfsHash: { type: String },
+        ipfsHash: { type: String, required: false },
       },
     ],
-    details: { type: Schema.Types.Mixed },
-    status: { type: String, required: true, enum: ["Active", "Accepted", "Revoked", "Rejected"] },
+    details: { type: Schema.Types.Mixed, default: {} },
+    status: {
+      type: String,
+      required: true,
+      enum: ["Active", "Accepted", "Revoked", "Rejected"],
+      default: "Active",
+    },
     dateRequested: { type: Date, required: true },
     dateIssued: { type: Date, required: true },
     requestId: { type: mongoose.Schema.Types.ObjectId, ref: "AffidavitRequest", required: true },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-    transactionHash: { type: String },
-    blockNumber: { type: Number },
-    ipfsHash: { type: String },
+    transactionHash: { type: String, required: false },
+    blockNumber: { type: Number, required: false },
+    dataHash: { type: String, required: false },
     isVerifiedOnBlockchain: { type: Boolean, default: false },
-    lastVerifiedAt: { type: Date },
+    lastVerifiedAt: { type: Date, required: false },
   },
-  { timestamps: true },
-)
+  { timestamps: true }
+);
 
-// Create a function to generate a unique display ID
 affidavitSchema.statics.generateDisplayId = async function () {
-  const currentYear = new Date().getFullYear()
+  const currentYear = new Date().getFullYear();
   const latestAffidavit = await this.findOne({ displayId: new RegExp(`AFF-${currentYear}-`) })
     .sort({ displayId: -1 })
-    .lean()
+    .lean();
 
-  let nextNumber = 1
+  let nextNumber = 1;
   if (latestAffidavit) {
-    const parts = latestAffidavit.displayId.split("-")
+    const parts = latestAffidavit.displayId.split("-");
     if (parts.length === 3) {
-      nextNumber = Number.parseInt(parts[2]) + 1
+      nextNumber = Number.parseInt(parts[2]) + 1;
     }
   }
 
-  return `AFF-${currentYear}-${nextNumber.toString().padStart(5, "0")}`
-}
+  return `AFF-${currentYear}-${nextNumber.toString().padStart(5, "0")}`;
+};
 
 const Affidavit: Model<IAffidavit> & { generateDisplayId: () => Promise<string> } =
   (mongoose.models.Affidavit as any) ||
   mongoose.model<IAffidavit, Model<IAffidavit> & { generateDisplayId: () => Promise<string> }>(
     "Affidavit",
-    affidavitSchema,
-  )
+    affidavitSchema
+  );
 
-export default Affidavit
+export default Affidavit;

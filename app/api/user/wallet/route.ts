@@ -1,11 +1,19 @@
 import { NextResponse } from "next/server";
 import { headers } from "next/headers";
-import {dbConnect} from "@/lib/db";
+import { dbConnect } from "@/lib/db";
 import User from "@/lib/models/user";
 import jwt from "jsonwebtoken";
 import { ethers } from "ethers";
 
 const JWT_SECRET = process.env.JWT_SECRET || "AFFIDBLOCK";
+
+// Map chain IDs to network names
+const NETWORK_MAP: { [key: string]: string } = {
+  "1337": "ganache",
+  "11155111": "sepolia",
+  "1": "mainnet",
+  "5": "goerli",
+};
 
 export async function POST(request: Request) {
   try {
@@ -20,15 +28,19 @@ export async function POST(request: Request) {
     const decoded = jwt.verify(token, JWT_SECRET) as { id: string; email: string; role: string };
 
     const body = await request.json();
-    const { walletAddress, network } = body;
+    const { walletAddress, chainId } = body;
 
     if (!walletAddress || !ethers.isAddress(walletAddress)) {
       return NextResponse.json({ success: false, error: "Invalid wallet address" }, { status: 400 });
     }
 
-    if (!network) {
-      return NextResponse.json({ success: false, error: "Network is required" }, { status: 400 });
+    if (!chainId) {
+      return NextResponse.json({ success: false, error: "Chain ID is required" }, { status: 400 });
     }
+
+    // Map the chain ID to a network name
+    const network = NETWORK_MAP[chainId.toString()] || "unknown";
+    console.log(`Mapped chain ID ${chainId} to network: ${network}`);
 
     await dbConnect();
 
@@ -40,7 +52,7 @@ export async function POST(request: Request) {
           walletConnectedAt: new Date(),
           network,
         },
-      }
+      },
     );
 
     if (updateResult.modifiedCount !== 1) {
@@ -82,7 +94,7 @@ export async function DELETE(request: Request) {
           walletConnectedAt: "",
           network: "",
         },
-      }
+      },
     );
 
     if (updateResult.modifiedCount !== 1) {

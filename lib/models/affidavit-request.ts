@@ -1,15 +1,16 @@
-import mongoose from "mongoose"
+import mongoose from "mongoose";
 
 const witnessSchema = new mongoose.Schema({
   contactId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
   hasAccepted: { type: Boolean, default: null },
-})
+});
 
 const documentSchema = new mongoose.Schema({
   url: { type: String, required: true },
   name: { type: String, required: true },
   type: { type: String, required: true },
-})
+  ipfsHash: { type: String },
+});
 
 const affidavitRequestSchema = new mongoose.Schema({
   displayId: { type: String, required: true, unique: true },
@@ -36,8 +37,8 @@ const affidavitRequestSchema = new mongoose.Schema({
   status: { type: String, enum: ["pending", "accepted", "rejected"], default: "pending" },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now },
-})
+});
 
-const AffidavitRequest = mongoose.models.AffidavitRequest || mongoose.model("AffidavitRequest", affidavitRequestSchema)
+const AffidavitRequest = mongoose.models.AffidavitRequest || mongoose.model("AffidavitRequest", affidavitRequestSchema);
 
-export default AffidavitRequest
+export default AffidavitRequest;

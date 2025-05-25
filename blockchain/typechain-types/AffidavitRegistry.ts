@@ -9,7 +9,6 @@ import type {
   Result,
   Interface,
   EventFragment,
-  AddressLike,
   ContractRunner,
   ContractMethod,
   Listener,
@@ -47,9 +46,10 @@ export interface AffidavitRegistryInterface extends Interface {
       string,
       string,
       string,
-      AddressLike,
-      AddressLike,
-      AddressLike,
+      string,
+      string,
+      string,
+      string[],
       string[],
       string
     ]
@@ -64,7 +64,7 @@ export interface AffidavitRegistryInterface extends Interface {
   ): string;
   encodeFunctionData(
     functionFragment: "getUserAffidavits",
-    values: [AddressLike]
+    values: [string]
   ): string;
   encodeFunctionData(
     functionFragment: "getWitnesses",
@@ -112,17 +112,17 @@ export interface AffidavitRegistryInterface extends Interface {
 export namespace AffidavitCreatedEvent {
   export type InputTuple = [
     affidavitId: string,
-    issuer: AddressLike,
+    issuerId: string,
     timestamp: BigNumberish
   ];
   export type OutputTuple = [
     affidavitId: string,
-    issuer: string,
+    issuerId: string,
     timestamp: bigint
   ];
   export interface OutputObject {
     affidavitId: string;
-    issuer: string;
+    issuerId: string;
     timestamp: bigint;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
@@ -134,17 +134,17 @@ export namespace AffidavitCreatedEvent {
 export namespace AffidavitRevokedEvent {
   export type InputTuple = [
     affidavitId: string,
-    issuer: AddressLike,
+    issuerId: string,
     timestamp: BigNumberish
   ];
   export type OutputTuple = [
     affidavitId: string,
-    issuer: string,
+    issuerId: string,
     timestamp: bigint
   ];
   export interface OutputObject {
     affidavitId: string;
-    issuer: string;
+    issuerId: string;
     timestamp: bigint;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
@@ -203,11 +203,12 @@ export interface AffidavitRegistry extends BaseContract {
       _category: string,
       _description: string,
       _declaration: string,
-      _issuer: AddressLike,
-      _seller: AddressLike,
-      _buyer: AddressLike,
+      _issuerId: string,
+      _sellerId: string,
+      _buyerId: string,
       _witnessIds: string[],
-      _ipfsHash: string
+      _ipfsHashes: string[],
+      _dataHash: string
     ],
     [void],
     "nonpayable"
@@ -225,6 +226,7 @@ export interface AffidavitRegistry extends BaseContract {
         string,
         string,
         string,
+        string[],
         string,
         bigint,
         boolean
@@ -234,12 +236,13 @@ export interface AffidavitRegistry extends BaseContract {
         category: string;
         description: string;
         declaration: string;
-        issuer: string;
-        seller: string;
-        buyer: string;
-        ipfsHash: string;
+        issuerId: string;
+        sellerId: string;
+        buyerId: string;
+        ipfsHashes: string[];
+        dataHash: string;
         timestamp: bigint;
-        isActive: boolean;
+        onBlockchain: boolean;
       }
     ],
     "view"
@@ -247,11 +250,7 @@ export interface AffidavitRegistry extends BaseContract {
 
   getAffidavitCount: TypedContractMethod<[], [bigint], "view">;
 
-  getUserAffidavits: TypedContractMethod<
-    [_user: AddressLike],
-    [string[]],
-    "view"
-  >;
+  getUserAffidavits: TypedContractMethod<[_userId: string], [string[]], "view">;
 
   getWitnesses: TypedContractMethod<[_affidavitId: string], [string[]], "view">;
 
@@ -263,7 +262,7 @@ export interface AffidavitRegistry extends BaseContract {
 
   verifyAffidavit: TypedContractMethod<
     [_affidavitId: string],
-    [[boolean, boolean] & { exists: boolean; isActive: boolean }],
+    [[boolean, boolean] & { exists: boolean; onBlockchain: boolean }],
     "view"
   >;
 
@@ -280,11 +279,12 @@ export interface AffidavitRegistry extends BaseContract {
       _category: string,
       _description: string,
       _declaration: string,
-      _issuer: AddressLike,
-      _seller: AddressLike,
-      _buyer: AddressLike,
+      _issuerId: string,
+      _sellerId: string,
+      _buyerId: string,
       _witnessIds: string[],
-      _ipfsHash: string
+      _ipfsHashes: string[],
+      _dataHash: string
     ],
     [void],
     "nonpayable"
@@ -303,6 +303,7 @@ export interface AffidavitRegistry extends BaseContract {
         string,
         string,
         string,
+        string[],
         string,
         bigint,
         boolean
@@ -312,12 +313,13 @@ export interface AffidavitRegistry extends BaseContract {
         category: string;
         description: string;
         declaration: string;
-        issuer: string;
-        seller: string;
-        buyer: string;
-        ipfsHash: string;
+        issuerId: string;
+        sellerId: string;
+        buyerId: string;
+        ipfsHashes: string[];
+        dataHash: string;
         timestamp: bigint;
-        isActive: boolean;
+        onBlockchain: boolean;
       }
     ],
     "view"
@@ -327,7 +329,7 @@ export interface AffidavitRegistry extends BaseContract {
   ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
     nameOrSignature: "getUserAffidavits"
-  ): TypedContractMethod<[_user: AddressLike], [string[]], "view">;
+  ): TypedContractMethod<[_userId: string], [string[]], "view">;
   getFunction(
     nameOrSignature: "getWitnesses"
   ): TypedContractMethod<[_affidavitId: string], [string[]], "view">;
@@ -338,7 +340,7 @@ export interface AffidavitRegistry extends BaseContract {
     nameOrSignature: "verifyAffidavit"
   ): TypedContractMethod<
     [_affidavitId: string],
-    [[boolean, boolean] & { exists: boolean; isActive: boolean }],
+    [[boolean, boolean] & { exists: boolean; onBlockchain: boolean }],
     "view"
   >;
 
@@ -358,7 +360,7 @@ export interface AffidavitRegistry extends BaseContract {
   >;
 
   filters: {
-    "AffidavitCreated(string,address,uint256)": TypedContractEvent<
+    "AffidavitCreated(string,string,uint256)": TypedContractEvent<
       AffidavitCreatedEvent.InputTuple,
       AffidavitCreatedEvent.OutputTuple,
       AffidavitCreatedEvent.OutputObject
@@ -369,7 +371,7 @@ export interface AffidavitRegistry extends BaseContract {
       AffidavitCreatedEvent.OutputObject
     >;
 
-    "AffidavitRevoked(string,address,uint256)": TypedContractEvent<
+    "AffidavitRevoked(string,string,uint256)": TypedContractEvent<
       AffidavitRevokedEvent.InputTuple,
       AffidavitRevokedEvent.OutputTuple,
       AffidavitRevokedEvent.OutputObject

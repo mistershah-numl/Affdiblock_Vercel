@@ -10,7 +10,6 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { jsPDF } from "jspdf";
 import { toast } from "@/components/ui/use-toast";
-import { verifyAffidavit } from "@/lib/blockchain";
 
 export default function AffidavitDetailPage() {
   const router = useRouter();
@@ -23,7 +22,7 @@ export default function AffidavitDetailPage() {
   const [pinataData, setPinataData] = useState<any>(null);
   const [isVerifying, setIsVerifying] = useState(false);
   const [isVerified, setIsVerified] = useState<boolean | null>(null);
-  const [isTampered, setIsTampered] = useState<boolean | false>(false);
+  const [isTampered, setIsTampered] = useState<boolean>(false);
   const [originalData, setOriginalData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -37,16 +36,13 @@ export default function AffidavitDetailPage() {
   const fetchAffidavit = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch(`/api/affidavits/verify?id=${id}`);
+      const response = await fetch(`/api/affidavits/get?id=${id}`);
       const data = await response.json();
 
       if (data.success) {
         setAffidavit(data.affidavit);
-        setBlockchainData(data.blockchainData);
-        setPinataData(data.pinataData);
-        setIsVerified(data.verified);
-        setIsTampered(!data.verified);
-        setOriginalData(data.originalData);
+        setIsVerified(data.affidavit.isVerifiedOnBlockchain);
+        setIsTampered(!data.affidavit.isVerifiedOnBlockchain);
       } else {
         toast({
           title: "Error",
@@ -58,7 +54,7 @@ export default function AffidavitDetailPage() {
       console.error("Error fetching affidavit:", error);
       toast({
         title: "Error",
-        description: "An unexpected error occurred",
+        description: "An unexpected error occurred while fetching affidavit",
         variant: "destructive",
       });
     } finally {
@@ -72,18 +68,25 @@ export default function AffidavitDetailPage() {
       const response = await fetch(`/api/affidavits/verify?id=${id}`);
       const data = await response.json();
 
+      if (!response.ok) {
+        throw new Error(data.error || `Server responded with ${response.status}`);
+      }
+
       if (data.success) {
         setIsVerified(data.verified);
-        setIsTampered(!data.verified);
+        setIsTampered(data.isTampered);
         setBlockchainData(data.blockchainData);
         setPinataData(data.pinataData);
         setOriginalData(data.originalData);
+        setAffidavit({ ...affidavit, isVerifiedOnBlockchain: data.verified });
 
         toast({
           title: data.verified ? "Verification Successful" : "Verification Failed",
           description: data.verified
-            ? "This affidavit is verified on the blockchain"
-            : "This affidavit may have been tampered with.",
+            ? "This affidavit is verified on the blockchain."
+            : data.isTampered
+            ? "This affidavit data has been tampered with. Original data displayed below."
+            : data.reason || "Blockchain verification failed.",
           variant: data.verified ? "default" : "destructive",
         });
       } else {
@@ -96,8 +99,8 @@ export default function AffidavitDetailPage() {
     } catch (error) {
       console.error("Error verifying affidavit:", error);
       toast({
-        title: "Error",
-        description: "An unexpected error occurred during verification",
+        title: "Verification Error",
+        description: error instanceof Error ? error.message : "An unexpected error occurred during verification",
         variant: "destructive",
       });
     } finally {
@@ -131,10 +134,10 @@ export default function AffidavitDetailPage() {
     pdf.setFont("helvetica", "normal");
     pdf.setFontSize(12);
     pdf.text(`Affidavit ID: ${affidavit.displayId}`, 15, 55);
-    pdf.text(`Issued By: ${affidavit.issuerName}`, 15, 62);
+    pdf.text(`Issued By: ${affidavit.issuerId?.name || "N/A"}`, 15, 62);
     pdf.text(`Category: ${affidavit.category}`, 15, 69);
     pdf.text(`Date Issued: ${new Date(affidavit.dateIssued).toLocaleDateString()}`, 15, 76);
-    pdf.text(`Status: ${affidavit.status}`, 15, 83);
+    pdf.text(`Status: ${affidavit.isVerifiedOnBlockchain ? "Verified" : "Non-Verified"}`, 15, 83);
 
     pdf.setFont("helvetica", "bold");
     pdf.setFontSize(14);
@@ -142,14 +145,14 @@ export default function AffidavitDetailPage() {
     pdf.setFont("helvetica", "normal");
     pdf.setFontSize(12);
     let yPos = 105;
-    pdf.text(`Issuer: ${affidavit.issuerName}`, 15, yPos);
+    pdf.text(`Issuer: ${affidavit.issuerId?.name || "N/A"}`, 15, yPos);
     yPos += 7;
-    if (affidavit.sellerName) {
-      pdf.text(`Seller: ${affidavit.sellerName}`, 15, yPos);
+    if (affidavit.sellerId?.name) {
+      pdf.text(`Seller: ${affidavit.sellerId.name}`, 15, yPos);
       yPos += 7;
     }
-    if (affidavit.buyerName) {
-      pdf.text(`Buyer: ${affidavit.buyerName}`, 15, yPos);
+    if (affidavit.buyerId?.name) {
+      pdf.text(`Buyer: ${affidavit.buyerId.name}`, 15, yPos);
       yPos += 7;
     }
     if (affidavit.witnesses && affidavit.witnesses.length > 0) {
@@ -160,7 +163,7 @@ export default function AffidavitDetailPage() {
       pdf.setFontSize(12);
       yPos += 17;
       affidavit.witnesses.forEach((witness: any, index: number) => {
-        pdf.text(`${index + 1}. ${witness.name} (ID: ${witness.idCardNumber})`, 15, yPos);
+        pdf.text(`${index + 1}. ${witness.contactId?.name || "N/A"} (ID: ${witness.contactId?.idCardNumber || "N/A"})`, 15, yPos);
         yPos += 7;
       });
     }
@@ -182,7 +185,7 @@ export default function AffidavitDetailPage() {
     pdf.setFont("helvetica", "bold");
     pdf.text("Authorized Signature:", 15, 250);
     pdf.setFont("helvetica", "normal");
-    pdf.text(affidavit.issuerName, 15, 257);
+    pdf.text(affidavit.issuerId?.name || "N/A", 15, 257);
 
     pdf.setFont("helvetica", "bold");
     pdf.text("Official Seal:", 150, 250);
@@ -278,27 +281,11 @@ export default function AffidavitDetailPage() {
     );
   }
 
-  const getStatusBadge = (status: string) => {
-    switch (status.toLowerCase()) {
-      case "active":
-        return <Badge className="bg-green-500 text-white">Active</Badge>;
-      case "pending":
-        return (
-          <Badge variant="outline" className="text-orange-500 border-orange-500">
-            Pending
-          </Badge>
-        );
-      case "rejected":
-        return <Badge variant="destructive">Rejected</Badge>;
-      case "revoked":
-        return (
-          <Badge variant="secondary" className="bg-gray-500 text-white">
-            Revoked
-          </Badge>
-        );
-      default:
-        return <Badge variant="secondary">{status}</Badge>;
+  const getStatusBadge = (status: string, isVerifiedOnBlockchain: boolean) => {
+    if (isVerifiedOnBlockchain) {
+      return <Badge className="bg-green-500 text-white">Verified</Badge>;
     }
+    return <Badge className="bg-red-500 text-white">Non-Verified</Badge>;
   };
 
   return (
@@ -320,7 +307,7 @@ export default function AffidavitDetailPage() {
                 <h1 className="text-2xl font-bold text-gray-900 mt-1">{affidavit.title.toUpperCase()}</h1>
                 <p className="text-sm text-gray-500 mt-1">Issued under legal compliance</p>
                 <div className="border-t border-gray-300 my-4"></div>
-                {getStatusBadge(affidavit.status)}
+                {getStatusBadge(affidavit.status, affidavit.isVerifiedOnBlockchain)}
               </div>
 
               <Tabs defaultValue="details" className="mt-6">
@@ -335,10 +322,10 @@ export default function AffidavitDetailPage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                     {[
                       { label: "Affidavit ID", value: affidavit.displayId },
-                      { label: "Issuer", value: affidavit.issuerName },
+                      { label: "Issuer", value: affidavit.issuerId?.name || "N/A" },
                       { label: "Category", value: affidavit.category },
                       { label: "Date Issued", value: new Date(affidavit.dateIssued).toLocaleDateString() },
-                      { label: "Status", value: affidavit.status },
+                      { label: "Status", value: affidavit.isVerifiedOnBlockchain ? "Verified" : "Non-Verified" },
                     ].map((item, index) => (
                       <div key={index} className="bg-gray-100 p-4 rounded-lg shadow-sm">
                         <p className="text-sm text-gray-500">{item.label}</p>
@@ -356,7 +343,7 @@ export default function AffidavitDetailPage() {
                   <div className="mt-10 flex justify-between items-center">
                     <div>
                       <p className="text-sm text-gray-500">Authorized Signature</p>
-                      <h2 className="text-lg font-semibold">{affidavit.issuerName}</h2>
+                      <h2 className="text-lg font-semibold">{affidavit.issuerId?.name || "N/A"}</h2>
                     </div>
                     <div className="text-right">
                       <p className="text-sm text-gray-500">Official Seal</p>
@@ -371,34 +358,28 @@ export default function AffidavitDetailPage() {
                       <h2 className="text-lg font-semibold text-gray-700 mb-3">Parties</h2>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="bg-gray-100 p-4 rounded-lg shadow-sm">
-                          <Badge variant="outline" className="mb-2">
-                            Issuer
-                          </Badge>
-                          <h3 className="font-semibold cursor-pointer" onClick={() => handleViewProfile(affidavit.issuerIdCardNumber)}>
-                            {affidavit.issuerName}
+                          <Badge variant="outline" className="mb-2">Issuer</Badge>
+                          <h3 className="font-semibold cursor-pointer" onClick={() => handleViewProfile(affidavit.issuerId?.idCardNumber || "")}>
+                            {affidavit.issuerId?.name || "N/A"}
                           </h3>
-                          <p className="text-sm text-gray-500">ID Card: {affidavit.issuerIdCardNumber}</p>
+                          <p className="text-sm text-gray-500">ID Card: {affidavit.issuerId?.idCardNumber || "N/A"}</p>
                         </div>
-                        {affidavit.sellerName && (
+                        {affidavit.sellerId?.name && (
                           <div className="bg-gray-100 p-4 rounded-lg shadow-sm">
-                            <Badge variant="outline" className="mb-2">
-                              Seller
-                            </Badge>
-                            <h3 className="font-semibold cursor-pointer" onClick={() => handleViewProfile(affidavit.sellerIdCardNumber)}>
-                              {affidavit.sellerName}
+                            <Badge variant="outline" className="mb-2">Seller</Badge>
+                            <h3 className="font-semibold cursor-pointer" onClick={() => handleViewProfile(affidavit.sellerId.idCardNumber)}>
+                              {affidavit.sellerId.name}
                             </h3>
-                            <p className="text-sm text-gray-500">ID Card: {affidavit.sellerIdCardNumber}</p>
+                            <p className="text-sm text-gray-500">ID Card: {affidavit.sellerId.idCardNumber}</p>
                           </div>
                         )}
-                        {affidavit.buyerName && (
+                        {affidavit.buyerId?.name && (
                           <div className="bg-gray-100 p-4 rounded-lg shadow-sm">
-                            <Badge variant="outline" className="mb-2">
-                              Buyer
-                            </Badge>
-                            <h3 className="font-semibold cursor-pointer" onClick={() => handleViewProfile(affidavit.buyerIdCardNumber)}>
-                              {affidavit.buyerName}
+                            <Badge variant="outline" className="mb-2">Buyer</Badge>
+                            <h3 className="font-semibold cursor-pointer" onClick={() => handleViewProfile(affidavit.buyerId.idCardNumber)}>
+                              {affidavit.buyerId.name}
                             </h3>
-                            <p className="text-sm text-gray-500">ID Card: {affidavit.buyerIdCardNumber}</p>
+                            <p className="text-sm text-gray-500">ID Card: {affidavit.buyerId.idCardNumber}</p>
                           </div>
                         )}
                       </div>
@@ -410,10 +391,10 @@ export default function AffidavitDetailPage() {
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           {affidavit.witnesses.map((witness: any, index: number) => (
                             <div key={index} className="bg-gray-100 p-4 rounded-lg shadow-sm">
-                              <h3 className="font-semibold cursor-pointer" onClick={() => handleViewProfile(witness.idCardNumber)}>
-                                {witness.name}
+                              <h3 className="font-semibold cursor-pointer" onClick={() => handleViewProfile(witness.contactId?.idCardNumber || "")}>
+                                {witness.contactId?.name || "N/A"}
                               </h3>
-                              <p className="text-sm text-gray-500">ID Card: {witness.idCardNumber}</p>
+                              <p className="text-sm text-gray-500">ID Card: {witness.contactId?.idCardNumber || "N/A"}</p>
                             </div>
                           ))}
                         </div>
@@ -425,19 +406,21 @@ export default function AffidavitDetailPage() {
                 <TabsContent value="documents" className="pt-4">
                   <div className="space-y-6">
                     <h2 className="text-lg font-semibold text-gray-700 mb-3">Attached Documents</h2>
-                    {pinataData?.documents && pinataData.documents.length > 0 ? (
-                      pinataData.documents.map((doc: any, index: number) => (
+                    {affidavit.documents && affidavit.documents.length > 0 ? (
+                      affidavit.documents.map((doc: any, index: number) => (
                         <div key={index} className="bg-gray-100 p-4 rounded-lg shadow-sm">
                           <h3 className="font-semibold">{doc.name}</h3>
                           <p className="text-sm text-gray-500">Type: {doc.type}</p>
-                          <a
-                            href={`https://gateway.pinata.cloud/ipfs/${doc.ipfsHash}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-blue-600 hover:underline mt-2 inline-block"
-                          >
-                            View Document
-                          </a>
+                          {doc.ipfsHash && (
+                            <a
+                              href={`https://gateway.pinata.cloud/ipfs/${doc.ipfsHash}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-600 hover:underline mt-2 inline-block"
+                            >
+                              View Document
+                            </a>
+                          )}
                         </div>
                       ))
                     ) : (
@@ -491,18 +474,25 @@ export default function AffidavitDetailPage() {
                         </h3>
                         <p className={`text-sm ${isVerified ? "text-green-700" : "text-red-700"}`}>
                           {isVerified
-                            ? "This affidavit is authentic and verified."
+                            ? "This affidavit is authentic and verified on the blockchain."
                             : isTampered
-                            ? "Data tampering detected. Original data below:"
+                            ? "This affidavit data has been tampered with. Original blockchain data below:"
                             : "Verification failed due to blockchain error."}
                         </p>
                         {originalData && (
                           <div className="mt-2 p-2 bg-white rounded border">
                             <h4 className="font-semibold text-red-800">Original Blockchain Data</h4>
-                            <p>IPFS Hash: {originalData.ipfsHash}</p>
-                            <p>Title: {originalData.title}</p>
-                            <p>Category: {originalData.category}</p>
-                            {/* Add more fields as needed */}
+                            <p><strong>IPFS Hash:</strong> {originalData.ipfsHash || "N/A"}</p>
+                            <p><strong>Title:</strong> {originalData.title || "N/A"}</p>
+                            <p><strong>Category:</strong> {originalData.category || "N/A"}</p>
+                            <p><strong>Description:</strong> {originalData.description || "N/A"}</p>
+                            <p><strong>Declaration:</strong> {originalData.declaration || "N/A"}</p>
+                            <p><strong>Issuer ID:</strong> {originalData.issuerId || "N/A"}</p>
+                            <p><strong>Seller ID:</strong> {originalData.sellerId || "N/A"}</p>
+                            <p><strong>Buyer ID:</strong> {originalData.buyerId || "N/A"}</p>
+                            <p><strong>Witnesses:</strong> {originalData.witnesses?.join(", ") || "None"}</p>
+                            <p><strong>Documents:</strong> {originalData.documents?.join(", ") || "None"}</p>
+                            <p><strong>Data Hash:</strong> {originalData.dataHash || "N/A"}</p>
                           </div>
                         )}
                       </div>
@@ -539,8 +529,8 @@ export default function AffidavitDetailPage() {
                   <span>Share Affidavit</span>
                 </Button>
 
-                <Button onClick={verifyOnBlockchain} variant="outline" className="w-full">
-                  Verify on Blockchain
+                <Button onClick={verifyOnBlockchain} variant="outline" className="w-full" disabled={isVerifying}>
+                  {isVerifying ? "Verifying..." : "Verify on Blockchain"}
                 </Button>
               </div>
 

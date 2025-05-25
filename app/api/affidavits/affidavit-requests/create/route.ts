@@ -1,112 +1,157 @@
-import { type NextRequest, NextResponse } from "next/server"
-import { dbConnect } from "@/lib/db"
-import AffidavitRequest from "@/lib/models/affidavit-request"
-import User from "@/lib/models/user"
-import { uploadFile } from "@/lib/upload"
+import { type NextRequest, NextResponse } from "next/server";
+import { dbConnect } from "@/lib/db";
+import AffidavitRequest from "@/lib/models/affidavit-request";
+import User from "@/lib/models/user";
+import { uploadFile } from "@/lib/upload";
 
 export async function POST(request: NextRequest) {
   try {
-    await dbConnect()
+    await dbConnect();
 
-    const formData = await request.formData()
-    const title = formData.get("title") as string
-    const category = formData.get("category") as string
-    const stampValue = formData.get("stampValue") as string
-    const issuerId = formData.get("issuerId") as string
-    const description = formData.get("description") as string
-    const declaration = formData.get("declaration") as string
-    const userRole = formData.get("userRole") as string
-    let sellerId = formData.get("sellerId") as string | null
-    let buyerId = formData.get("buyerId") as string | null
-    const witnesses = JSON.parse(formData.get("witnesses") as string)
-    const details = JSON.parse(formData.get("details") as string)
-    const createdBy = formData.get("createdBy") as string
-    const initiatorIdCardNumber = formData.get("initiatorIdCardNumber") as string
-    const files = formData.getAll("documents") as File[]
+    const formData = await request.formData();
+    const title = formData.get("title") as string;
+    const category = formData.get("category") as string;
+    const stampValue = formData.get("stampValue") as string;
+    const issuerId = formData.get("issuerId") as string;
+    const description = formData.get("description") as string;
+    const declaration = formData.get("declaration") as string;
+    const userRole = formData.get("userRole") as string;
+    let sellerId = formData.get("sellerId") as string | null;
+    let buyerId = formData.get("buyerId") as string | null;
+    const witnesses = JSON.parse(formData.get("witnesses") as string);
+    const details = JSON.parse(formData.get("details") as string);
+    const createdBy = formData.get("createdBy") as string;
+    const initiatorIdCardNumber = formData.get("initiatorIdCardNumber") as string;
+    const files = formData.getAll("documents") as File[];
 
     // Validate required fields
     if (!title || !category || !stampValue || !issuerId || !description || !declaration || !userRole || !createdBy || !initiatorIdCardNumber) {
-      return NextResponse.json({ success: false, error: "Missing required fields" }, { status: 400 })
+      console.error("Missing required fields:", { title, category, stampValue, issuerId, description, declaration, userRole, createdBy, initiatorIdCardNumber });
+      return NextResponse.json({ success: false, error: "Missing required fields" }, { status: 400 });
     }
 
     // Set sellerId or buyerId based on userRole
     if (userRole === "Seller") {
-      sellerId = createdBy
+      sellerId = createdBy;
     } else if (userRole === "Buyer") {
-      buyerId = createdBy
+      buyerId = createdBy;
     }
 
     if (userRole === "Buyer" && !sellerId) {
-      return NextResponse.json({ success: false, error: "Seller ID is required for Buyer role" }, { status: 400 })
+      console.error("Seller ID is required for Buyer role");
+      return NextResponse.json({ success: false, error: "Seller ID is required for Buyer role" }, { status: 400 });
     }
     if (userRole === "Seller" && !buyerId) {
-      return NextResponse.json({ success: false, error: "Buyer ID is required for Seller role" }, { status: 400 })
+      console.error("Buyer ID is required for Seller role");
+      return NextResponse.json({ success: false, error: "Buyer ID is required for Seller role" }, { status: 400 });
     }
 
-    // Fetch user data for createdBy user (initiator)
-    const creator = await User.findById(createdBy)
+    // Fetch user data
+    const creator = await User.findById(createdBy);
     if (!creator) {
-      return NextResponse.json({ success: false, error: "Creator not found" }, { status: 404 })
+      console.error("Creator not found:", createdBy);
+      return NextResponse.json({ success: false, error: "Creator not found" }, { status: 404 });
     }
 
-    // Fetch ID card numbers for issuer, seller, buyer, and witnesses
-    const issuer = await User.findById(issuerId)
+    const issuer = await User.findById(issuerId);
     if (!issuer) {
-      return NextResponse.json({ success: false, error: "Issuer not found" }, { status: 404 })
+      console.error("Issuer not found:", issuerId);
+      return NextResponse.json({ success: false, error: "Issuer not found" }, { status: 404 });
     }
-    const issuerIdCardNumber = issuer.idCardNumber
+    const issuerIdCardNumber = issuer.idCardNumber;
 
-    let sellerIdCardNumber = null
-    let seller = null
+    let sellerIdCardNumber = null;
+    let seller = null;
     if (sellerId) {
-      seller = await User.findById(sellerId)
+      seller = await User.findById(sellerId);
       if (!seller) {
-        return NextResponse.json({ success: false, error: "Seller not found" }, { status: 404 })
+        console.error("Seller not found:", sellerId);
+        return NextResponse.json({ success: false, error: "Seller not found" }, { status: 404 });
       }
-      sellerIdCardNumber = seller.idCardNumber
+      sellerIdCardNumber = seller.idCardNumber;
     }
 
-    let buyerIdCardNumber = null
-    let buyer = null
+    let buyerIdCardNumber = null;
+    let buyer = null;
     if (buyerId) {
-      buyer = await User.findById(buyerId)
+      buyer = await User.findById(buyerId);
       if (!buyer) {
-        return NextResponse.json({ success: false, error: "Buyer not found" }, { status: 404 })
+        console.error("Buyer not found:", buyerId);
+        return NextResponse.json({ success: false, error: "Buyer not found" }, { status: 404 });
       }
-      buyerIdCardNumber = buyer.idCardNumber
+      buyerIdCardNumber = buyer.idCardNumber;
     }
 
     const witnessesWithIdCard = await Promise.all(
       witnesses.map(async (witness: { contactId: string; name: string }) => {
-        const user = await User.findById(witness.contactId)
-        return {
-          ...witness,
-          idCardNumber: user ? user.idCardNumber : null,
-          hasAccepted: null, // Witnesses start with null (pending)
+        const user = await User.findById(witness.contactId);
+        if (!user) {
+          console.error("Witness not found:", witness.contactId);
+          throw new Error(`Witness not found: ${witness.contactId}`);
         }
+        return {
+          contactId: witness.contactId,
+          hasAccepted: null,
+        };
       })
-    )
+    );
 
-    // Handle file uploads
+    // Handle file uploads to Pinata only if files are provided
     const uploadedDocuments = await Promise.all(
       files.map(async (file) => {
-        const buffer = Buffer.from(await file.arrayBuffer())
-        const result = await uploadFile(buffer, file.name, file.type, "affidavit-documents")
-        return {
-          url: result.url,
-          name: file.name,
-          type: file.type,
-          ipfsHash: result.ipfsHash || "", // Assuming uploadFile returns ipfsHash
+        try {
+          const buffer = Buffer.from(await file.arrayBuffer());
+          const result = await uploadFile(buffer, file.name, file.type, "documents");
+          if (!result.url || !result.ipfsHash) {
+            console.error("Pinata upload failed for file:", file.name, result);
+            throw new Error(`Pinata upload failed for ${file.name}`);
+          }
+          console.log("Pinata upload success:", {
+            fileName: file.name,
+            url: result.url,
+            ipfsHash: result.ipfsHash,
+          });
+          return {
+            url: result.url,
+            name: file.name,
+            type: file.type,
+            ipfsHash: result.ipfsHash,
+          };
+        } catch (error: any) {
+          console.error("Error uploading file to Pinata:", file.name, error.message);
+          throw new Error(`Failed to upload ${file.name}: ${error.message}`);
         }
       })
-    )
+    );
 
-    // Generate memorable displayId (e.g., AFFREQ-2025-001)
-    const year = new Date().getFullYear()
-    const count = await AffidavitRequest.countDocuments({ createdAt: { $gte: new Date(`${year}-01-01`) } })
-    const displayId = `AFFREQ-${year}-${String(count + 1).padStart(3, "0")}`
+    // Generate displayId
+    const year = new Date().getFullYear();
+    const count = await AffidavitRequest.countDocuments({ createdAt: { $gte: new Date(`${year}-01-01`) } });
+    const displayId = `AFFREQ-${year}-${String(count + 1).padStart(3, "0")}`;
 
-    // Create the affidavit request
+    // Log the data to be saved
+    console.log("Saving affidavit request with data:", {
+      displayId,
+      title,
+      category,
+      stampValue,
+      issuerId,
+      issuerIdCardNumber,
+      description,
+      declaration,
+      userRole,
+      sellerId,
+      sellerIdCardNumber,
+      buyerId,
+      buyerIdCardNumber,
+      witnesses: witnessesWithIdCard,
+      documents: uploadedDocuments,
+      details,
+      createdBy,
+      initiatorIdCardNumber,
+    });
+
+    // Create affidavit request
     const affidavitRequest = new AffidavitRequest({
       displayId,
       title,
@@ -130,34 +175,34 @@ export async function POST(request: NextRequest) {
       createdBy,
       initiatorIdCardNumber,
       status: "pending",
-    })
+    });
 
-    await affidavitRequest.save()
+    // Save to MongoDB
+    await affidavitRequest.save();
 
-    // Prepare data for Pinata (this might be done in a separate step, e.g., after creating the affidavit)
-    const pinataData = {
-      affidavitId: displayId,
-      title,
-      category,
-      description,
-      declaration,
-      issuer: { id: issuerId, idCardNumber: issuerIdCardNumber },
-      seller: sellerId ? { id: sellerId, idCardNumber: sellerIdCardNumber } : null,
-      buyer: buyerId ? { id: buyerId, idCardNumber: buyerIdCardNumber } : null,
-      witnesses: witnessesWithIdCard.map((w: any) => ({ id: w.contactId, idCardNumber: w.idCardNumber })),
-      documents: uploadedDocuments,
-      dateRequested: new Date().toISOString(),
-      dateIssued: null,
+    // Verify the saved document
+    const savedRequest = await AffidavitRequest.findById(affidavitRequest._id).lean();
+    if (savedRequest && savedRequest.documents) {
+      savedRequest.documents.forEach((doc: any, index: number) => {
+        console.log(`Saved document ${index + 1}:`, {
+          url: doc.url,
+          name: doc.name,
+          type: doc.type,
+          ipfsHash: doc.ipfsHash,
+        });
+        if (!doc.ipfsHash && uploadedDocuments[index].ipfsHash) {
+          console.warn(`IPFS hash missing for document ${doc.name} in MongoDB`);
+        }
+      });
     }
 
     return NextResponse.json({
       success: true,
       message: "Affidavit request created successfully",
       affidavitRequestId: affidavitRequest._id,
-      pinataData, // This might be used for Pinata storage elsewhere
-    })
-  } catch (error) {
-    console.error("Error creating affidavit request:", error)
-    return NextResponse.json({ success: false, error: "Internal server error" }, { status: 500 })
+    });
+  } catch (error: any) {
+    console.error("Error creating affidavit request:", error);
+    return NextResponse.json({ success: false, error: error.message || "Internal server error" }, { status: 500 });
   }
 }

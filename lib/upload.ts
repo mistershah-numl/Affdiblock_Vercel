@@ -1,18 +1,17 @@
-import { writeFile, mkdir } from "fs/promises"
-import path from "path"
-import { v4 as uuidv4 } from "uuid"
+import { uploadFileToIPFS } from "./services/ipfs-service";
 
-export type StorageLocation = "id-cards" | "documents" | "licenses" | "avatars"
+export type StorageLocation = "id-cards" | "documents" | "licenses" | "avatars";
 
 export interface UploadResult {
-  url: string
-  filename: string
-  contentType: string
-  size: number
+  url: string;
+  filename: string;
+  contentType: string;
+  size: number;
+  ipfsHash: string;
 }
 
 /**
- * Uploads a file to local storage
+ * Uploads a file to Pinata (IPFS)
  * @param file The file buffer to upload
  * @param originalFilename Original filename
  * @param contentType MIME type
@@ -27,51 +26,41 @@ export async function uploadFile(
   location: StorageLocation
 ): Promise<UploadResult> {
   // Validate file size (max 5MB)
-  const maxSize = 5 * 1024 * 1024 // 5MB in bytes
+  const maxSize = 5 * 1024 * 1024; // 5MB in bytes
   if (file.length > maxSize) {
-    throw new Error(`File size exceeds maximum limit of 5MB`)
+    throw new Error(`File size exceeds maximum limit of 5MB`);
   }
 
   // Validate content type for specific locations
-  const allowedImageTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"]
-  if (location === "avatars" || location === "id-cards") {
-    if (!allowedImageTypes.includes(contentType)) {
-      throw new Error(`Invalid file type. Only JPEG, PNG, GIF, and WebP images are allowed for ${location}`)
-    }
+  const allowedTypes = ["image/jpeg", "image/png", "application/pdf"];
+  if (location === "documents" && !allowedTypes.includes(contentType)) {
+    throw new Error(`Invalid file type. Only JPEG, PNG, and PDF are allowed for ${location}`);
+  }
+  const allowedImageTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+  if ((location === "avatars" || location === "id-cards") && !allowedImageTypes.includes(contentType)) {
+    throw new Error(`Invalid file type. Only JPEG, PNG, GIF, and WebP images are allowed for ${location}`);
   }
 
-  // Create directory if it doesn't exist
-  const uploadDir = path.join(process.cwd(), "public", "uploads", location)
+  // Create a File-like object for Pinata upload
+  const fileObj = new File([file], originalFilename, { type: contentType });
+
+  // Upload to Pinata
   try {
-    await mkdir(uploadDir, { recursive: true })
-  } catch (error) {
-    console.error(`Error creating directory ${uploadDir}:`, error)
-    throw new Error("Failed to create upload directory")
-  }
+    const ipfsHash = await uploadFileToIPFS(fileObj);
+    const url = `https://gateway.pinata.cloud/ipfs/${ipfsHash}`;
 
-  // Generate a unique filename
-  const extension = path.extname(originalFilename) || ".bin"
-  const filename = `${uuidv4()}${extension}`
-  const filePath = path.join(uploadDir, filename)
-
-  // Write the file
-  try {
-    await writeFile(filePath, file)
-  } catch (error) {
-    console.error(`Error writing file ${filePath}:`, error)
-    throw new Error("Failed to upload file")
-  }
-
-  // Return result
-  const url = `/uploads/${location}/${filename}`
-  return {
-    url,
-    filename,
-    contentType,
-    size: file.length,
+    return {
+      url,
+      filename: originalFilename,
+      contentType,
+      size: file.length,
+      ipfsHash,
+    };
+  } catch (error: any) {
+    console.error(`Error uploading file to Pinata:`, error);
+    throw new Error(`Failed to upload file to Pinata: ${error.message}`);
   }
 }
-
 /**
  * Note: This implementation stores files locally in the public/uploads directory.
  * For production, consider using a cloud storage solution like AWS S3 to handle

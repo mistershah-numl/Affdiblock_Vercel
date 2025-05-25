@@ -8,11 +8,12 @@ contract AffidavitRegistry {
         string category;
         string description;
         string declaration;
-        address issuer;
-        address seller;
-        address buyer;
+        string issuerId; // Changed from address to string
+        string sellerId; // Changed from address to string
+        string buyerId; // Changed from address to string
         string[] witnessIds;
-        string ipfsHash;
+        string[] ipfsHashes; // Changed to array
+        string dataHash; // Hash of all MongoDB data
         uint256 timestamp;
         bool onBlockchain;
     }
@@ -20,15 +21,15 @@ contract AffidavitRegistry {
     // Mapping from affidavit ID to Affidavit struct
     mapping(string => Affidavit) private affidavits;
     
-    // Mapping from user address to their affidavit IDs
-    mapping(address => string[]) private userAffidavits;
+    // Mapping from user ID to their affidavit IDs
+    mapping(string => string[]) private userAffidavits;
     
     // Array of all affidavit IDs
     string[] private allAffidavitIds;
 
     // Events
-    event AffidavitCreated(string affidavitId, address issuer, uint256 timestamp);
-    event AffidavitRevoked(string affidavitId, address issuer, uint256 timestamp);
+    event AffidavitCreated(string affidavitId, string issuerId, uint256 timestamp);
+    event AffidavitRevoked(string affidavitId, string issuerId, uint256 timestamp);
 
     /**
      * @dev Create a new affidavit
@@ -37,11 +38,12 @@ contract AffidavitRegistry {
      * @param _category Category of the affidavit
      * @param _description Description of the affidavit
      * @param _declaration Declaration text of the affidavit
-     * @param _issuer Address of the issuer
-     * @param _seller Address of the seller (if applicable)
-     * @param _buyer Address of the buyer (if applicable)
-     * @param _witnessIds Array of witness IDs (could be hashed identifiers)
-     * @param _ipfsHash IPFS hash where additional documents are stored
+     * @param _issuerId ID of the issuer
+     * @param _sellerId ID of the seller (if applicable)
+     * @param _buyerId ID of the buyer (if applicable)
+     * @param _witnessIds Array of witness IDs
+     * @param _ipfsHashes Array of IPFS hashes where additional documents are stored
+     * @param _dataHash Hash of all affidavit data
      */
     function createAffidavit(
         string memory _affidavitId,
@@ -49,46 +51,43 @@ contract AffidavitRegistry {
         string memory _category,
         string memory _description,
         string memory _declaration,
-        address _issuer,
-        address _seller,
-        address _buyer,
+        string memory _issuerId,
+        string memory _sellerId,
+        string memory _buyerId,
         string[] memory _witnessIds,
-        string memory _ipfsHash
+        string[] memory _ipfsHashes,
+        string memory _dataHash
     ) public {
-        // Ensure affidavit doesn't already exist
         require(bytes(affidavits[_affidavitId].affidavitId).length == 0, "Affidavit already exists");
         
-        // Create new affidavit
         Affidavit memory newAffidavit = Affidavit({
             affidavitId: _affidavitId,
             title: _title,
             category: _category,
             description: _description,
             declaration: _declaration,
-            issuer: _issuer,
-            seller: _seller,
-            buyer: _buyer,
+            issuerId: _issuerId,
+            sellerId: _sellerId,
+            buyerId: _buyerId,
             witnessIds: _witnessIds,
-            ipfsHash: _ipfsHash,
+            ipfsHashes: _ipfsHashes,
+            dataHash: _dataHash,
             timestamp: block.timestamp,
             onBlockchain: true
         });
         
-        // Store affidavit
         affidavits[_affidavitId] = newAffidavit;
         allAffidavitIds.push(_affidavitId);
         
-        // Add to user's affidavits
-        userAffidavits[_issuer].push(_affidavitId);
-        if (_seller != address(0)) {
-            userAffidavits[_seller].push(_affidavitId);
+        userAffidavits[_issuerId].push(_affidavitId);
+        if (bytes(_sellerId).length > 0) {
+            userAffidavits[_sellerId].push(_affidavitId);
         }
-        if (_buyer != address(0)) {
-            userAffidavits[_buyer].push(_affidavitId);
+        if (bytes(_buyerId).length > 0) {
+            userAffidavits[_buyerId].push(_affidavitId);
         }
         
-        // Emit event
-        emit AffidavitCreated(_affidavitId, _issuer, block.timestamp);
+        emit AffidavitCreated(_affidavitId, _issuerId, block.timestamp);
     }
 
     /**
@@ -96,30 +95,17 @@ contract AffidavitRegistry {
      * @param _affidavitId ID of the affidavit to revoke
      */
     function revokeAffidavit(string memory _affidavitId) public {
-        // Ensure affidavit exists
         require(bytes(affidavits[_affidavitId].affidavitId).length > 0, "Affidavit does not exist");
-        
-        // Ensure caller is the issuer
-        require(affidavits[_affidavitId].issuer == msg.sender, "Only issuer can revoke");
-        
-        // Emit event
-        emit AffidavitRevoked(_affidavitId, msg.sender, block.timestamp);
+        require(
+            keccak256(abi.encodePacked(affidavits[_affidavitId].issuerId)) == keccak256(abi.encodePacked(msg.sender)),
+            "Only issuer can revoke"
+        );
+        emit AffidavitRevoked(_affidavitId, affidavits[_affidavitId].issuerId, block.timestamp);
     }
 
     /**
      * @dev Get affidavit details
      * @param _affidavitId ID of the affidavit to retrieve
-     * @return affidavitId Unique identifier
-     * @return title Title of the affidavit
-     * @return category Category of the affidavit
-     * @return description Description of the affidavit
-     * @return declaration Declaration text
-     * @return issuer Address of the issuer
-     * @return seller Address of the seller
-     * @return buyer Address of the buyer
-     * @return ipfsHash IPFS hash of additional documents
-     * @return timestamp Creation timestamp
-     * @return onBlockchain Whether the affidavit is stored on blockchain
      */
     function getAffidavit(string memory _affidavitId) public view returns (
         string memory affidavitId,
@@ -127,10 +113,11 @@ contract AffidavitRegistry {
         string memory category,
         string memory description,
         string memory declaration,
-        address issuer,
-        address seller,
-        address buyer,
-        string memory ipfsHash,
+        string memory issuerId,
+        string memory sellerId,
+        string memory buyerId,
+        string[] memory ipfsHashes,
+        string memory dataHash,
         uint256 timestamp,
         bool onBlockchain
     ) {
@@ -143,10 +130,11 @@ contract AffidavitRegistry {
             aff.category,
             aff.description,
             aff.declaration,
-            aff.issuer,
-            aff.seller,
-            aff.buyer,
-            aff.ipfsHash,
+            aff.issuerId,
+            aff.sellerId,
+            aff.buyerId,
+            aff.ipfsHashes,
+            aff.dataHash,
             aff.timestamp,
             aff.onBlockchain
         );
@@ -155,7 +143,6 @@ contract AffidavitRegistry {
     /**
      * @dev Get witness IDs for an affidavit
      * @param _affidavitId ID of the affidavit
-     * @return Array of witness IDs
      */
     function getWitnesses(string memory _affidavitId) public view returns (string[] memory) {
         require(bytes(affidavits[_affidavitId].affidavitId).length > 0, "Affidavit does not exist");
@@ -164,16 +151,14 @@ contract AffidavitRegistry {
 
     /**
      * @dev Get all affidavits for a user
-     * @param _user Address of the user
-     * @return Array of affidavit IDs
+     * @param _userId ID of the user
      */
-    function getUserAffidavits(address _user) public view returns (string[] memory) {
-        return userAffidavits[_user];
+    function getUserAffidavits(string memory _userId) public view returns (string[] memory) {
+        return userAffidavits[_userId];
     }
 
     /**
      * @dev Get count of all affidavits
-     * @return Count of affidavits
      */
     function getAffidavitCount() public view returns (uint256) {
         return allAffidavitIds.length;
@@ -182,8 +167,6 @@ contract AffidavitRegistry {
     /**
      * @dev Verify if an affidavit exists and is on blockchain
      * @param _affidavitId ID of the affidavit to verify
-     * @return exists Whether the affidavit exists
-     * @return onBlockchain Whether the affidavit is on blockchain
      */
     function verifyAffidavit(string memory _affidavitId) public view returns (bool exists, bool onBlockchain) {
         exists = bytes(affidavits[_affidavitId].affidavitId).length > 0;
