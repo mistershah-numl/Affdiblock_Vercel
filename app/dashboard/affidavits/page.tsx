@@ -971,6 +971,7 @@ export default function AffidavitsPage() {
                           <span className="sr-only">Edit</span>
                         </Button>
                       )}
+                      {/* Commented out the blockchain verify button
                       <Button
                         variant="ghost"
                         size="sm"
@@ -980,6 +981,7 @@ export default function AffidavitsPage() {
                         <CheckCircle className="h-4 w-4" />
                         <span className="sr-only">Verify on Blockchain</span>
                       </Button>
+                      */}
                       {userRole === "Admin" && (
                         <Button
                           variant="ghost"
