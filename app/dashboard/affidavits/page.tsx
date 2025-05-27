@@ -25,8 +25,8 @@ import { useAuth } from "@/lib/auth-context";
 import { toast } from "@/components/ui/use-toast";
 import { ethers } from "ethers";
 import { getConnectedMetaMaskWallet } from "@/lib/blockchain";
+import { generateAffidavitHash } from "@/lib/utils/hashGenerator";
 
-// Updated ABI to reflect string[] ipfsHashes
 const AffidavitRegistryABI = {
   abi: [
     {
@@ -139,6 +139,16 @@ interface Affidavit {
   category: string;
   issuerId: { _id: string; name: string; area: string; idCardNumber: string } | string;
   issuerName: string;
+  issuerIdCardNumber: string;
+  issuerWalletAddress: string;
+  sellerId: string;
+  sellerName: string;
+  sellerIdCardNumber: string;
+  sellerWalletAddress: string;
+  buyerId: string;
+  buyerName: string;
+  buyerIdCardNumber: string;
+  buyerWalletAddress: string;
   description: string;
   declaration: string;
   dateRequested: string;
@@ -147,6 +157,21 @@ interface Affidavit {
   transactionHash?: string;
   blockNumber?: number;
   createdAt: string;
+  dataHash: string;
+  witnesses: Array<{
+    contactId: string;
+    name: string;
+    idCardNumber: string;
+    walletAddress: string;
+  }>;
+  documents: Array<{
+    name: string;
+    type: string;
+    url: string;
+    ipfsHash?: string;
+  }>;
+  requestId: string;
+  createdBy: string;
 }
 
 export default function AffidavitsPage() {
@@ -159,13 +184,20 @@ export default function AffidavitsPage() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isViewRequestDialogOpen, setIsViewRequestDialogOpen] = useState(false);
+  const [isVerifyDialogOpen, setIsVerifyDialogOpen] = useState(false);
   const [selectedAffidavitId, setSelectedAffidavitId] = useState<string | null>(null);
   const [selectedAffidavitRequest, setSelectedAffidavitRequest] = useState<AffidavitRequest | null>(null);
+  const [selectedAffidavit, setSelectedAffidavit] = useState<Affidavit | null>(null);
   const [affidavitRequests, setAffidavitRequests] = useState<AffidavitRequest[]>([]);
   const [affidavits, setAffidavits] = useState<Affidavit[]>([]);
   const [isLoadingRequests, setIsLoadingRequests] = useState(true);
   const [isLoadingAffidavits, setIsLoadingAffidavits] = useState(true);
   const [isProcessingBlockchain, setIsProcessingBlockchain] = useState(false);
+  const [verificationResult, setVerificationResult] = useState<{
+    isVerified: boolean;
+    message: string;
+    blockchainData?: any;
+  } | null>(null);
 
   const userRole = user?.activeRole || "User";
 
@@ -319,6 +351,95 @@ export default function AffidavitsPage() {
     setIsViewRequestDialogOpen(true);
   };
 
+  const handleVerifyOnBlockchain = async (affidavit: Affidavit) => {
+    try {
+      setIsProcessingBlockchain(true);
+      setVerificationResult(null);
+      setSelectedAffidavit(affidavit);
+      setIsVerifyDialogOpen(true);
+
+      if (!window.ethereum) {
+        throw new Error("MetaMask is not installed. Please install MetaMask and try again.");
+      }
+
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const contractAddress = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || "0xED7864989c1f88481C5Ac0242F263DC4CE2D427d";
+      const contract = new ethers.Contract(contractAddress, AffidavitRegistryABI.abi, provider);
+
+      const blockchainData = await contract.getAffidavit(affidavit.displayId);
+      const blockchainHash = blockchainData.dataHash;
+
+      const affidavitDataForHash = {
+        displayId: affidavit.displayId,
+        title: affidavit.title || "",
+        category: affidavit.category || "",
+        description: affidavit.description || "",
+        declaration: affidavit.declaration || "",
+        issuerId: affidavit.issuerId._id?.toString() || affidavit.issuerId.toString(),
+        issuerName: affidavit.issuerName || "",
+        issuerIdCardNumber: affidavit.issuerIdCardNumber || "",
+        issuerWalletAddress: affidavit.issuerWalletAddress || "",
+        sellerId: affidavit.sellerId || "",
+        sellerName: affidavit.sellerName || "",
+        sellerIdCardNumber: affidavit.sellerIdCardNumber || "",
+        sellerWalletAddress: affidavit.sellerWalletAddress || "",
+        buyerId: affidavit.buyerId || "",
+        buyerName: affidavit.buyerName || "",
+        buyerIdCardNumber: affidavit.buyerIdCardNumber || "",
+        buyerWalletAddress: affidavit.buyerWalletAddress || "",
+        witnesses: affidavit.witnesses.map((w) => ({
+          contactId: w.contactId || "",
+          name: w.name || "",
+          idCardNumber: w.idCardNumber || "",
+          walletAddress: w.walletAddress || "",
+        })),
+        documents: affidavit.documents.map((doc) => ({
+          name: doc.name || "",
+          type: doc.type || "",
+          url: doc.url || "",
+          ipfsHash: doc.ipfsHash || "",
+        })),
+        status: affidavit.status || "Active",
+        dateRequested: affidavit.dateRequested ? new Date(affidavit.dateRequested).toISOString() : "",
+        dateIssued: affidavit.dateIssued ? new Date(affidavit.dateIssued).toISOString() : "",
+        requestId: affidavit.requestId || "",
+        createdBy: affidavit.createdBy || "",
+      };
+
+      const freshHash = generateAffidavitHash(affidavitDataForHash);
+
+      const isVerified = freshHash.toLowerCase() === blockchainHash.toLowerCase();
+
+      setVerificationResult({
+        isVerified,
+        message: isVerified
+          ? "Affidavit is active and authentic on the blockchain."
+          : "Verification failed: Data has been tampered with or does not match blockchain records.",
+        blockchainData: {
+          affidavitId: blockchainData.affidavitId,
+          title: blockchainData.title,
+          category: blockchainData.category,
+          description: blockchainData.description,
+          declaration: blockchainData.declaration,
+          issuerId: blockchainData.issuerId,
+          sellerId: blockchainData.sellerId,
+          buyerId: blockchainData.buyerId,
+          ipfsHashes: blockchainData.ipfsHashes,
+          dataHash: blockchainData.dataHash,
+          timestamp: Number(blockchainData.timestamp),
+          onBlockchain: blockchainData.onBlockchain,
+        },
+      });
+    } catch (error: any) {
+      setVerificationResult({
+        isVerified: false,
+        message: `Verification failed: ${error.message || "Unable to verify on blockchain"}`,
+      });
+    } finally {
+      setIsProcessingBlockchain(false);
+    }
+  };
+
   const handleRespondRequest = async (action: "accept" | "reject") => {
     if (!selectedAffidavitRequest || !user?._id) {
       toast({
@@ -333,7 +454,6 @@ export default function AffidavitsPage() {
     const isAccepted = action === "accept";
 
     try {
-      // Handle non-issuer or rejection logic
       if (
         user.activeRole !== "Issuer" ||
         !isAccepted ||
@@ -374,12 +494,10 @@ export default function AffidavitsPage() {
         return;
       }
 
-      // Issuer-specific logic for blockchain deployment
       if (!window.ethereum) {
         throw new Error("MetaMask is not installed. Please install MetaMask and try again.");
       }
 
-      // Fetch issuer wallet
       const issuerResponse = await fetch(`/api/user`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -392,7 +510,6 @@ export default function AffidavitsPage() {
         throw new Error("Issuer wallet address is not set. Please connect your blockchain wallet.");
       }
 
-      // Verify MetaMask wallet
       const connectedWallet = await getConnectedMetaMaskWallet();
       if (!connectedWallet || connectedWallet.toLowerCase() !== issuerWallet.toLowerCase()) {
         throw new Error(`Please connect MetaMask with address ${issuerWallet}.`);
@@ -405,7 +522,6 @@ export default function AffidavitsPage() {
         duration: 5000,
       });
 
-      // Initialize ethers provider and signer
       const provider = new ethers.BrowserProvider(window.ethereum);
       await window.ethereum.request({ method: "eth_requestAccounts" });
       const signer = await provider.getSigner();
@@ -415,9 +531,8 @@ export default function AffidavitsPage() {
         throw new Error("Contract address not set in environment variables.");
       }
 
-      // Verify network
       const network = await provider.getNetwork();
-      const expectedChainId = 1337; // Ganache chain ID
+      const expectedChainId = 1337;
       if (Number(network.chainId) !== expectedChainId) {
         try {
           await window.ethereum.request({
@@ -434,18 +549,13 @@ export default function AffidavitsPage() {
         }
       }
 
-      // Initialize contract
       let contract;
       try {
         contract = new ethers.Contract(contractAddress, AffidavitRegistryABI.abi, signer);
-
-        // Verify contract deployment
         const code = await provider.getCode(contractAddress);
         if (code === "0x") {
           throw new Error(`No contract deployed at address ${contractAddress}`);
         }
-
-        // Test contract interaction
         const affidavitCount = await contract.getAffidavitCount();
         console.log("Current affidavit count:", affidavitCount.toString());
       } catch (error: any) {
@@ -459,22 +569,19 @@ export default function AffidavitsPage() {
         duration: 10000,
       });
 
-      // Prepare transaction data
       const displayId = `AFF-${new Date().getFullYear()}-${Math.floor(10000 + Math.random() * 90000)}`;
       const ipfsHashes = selectedAffidavitRequest.documents.map((doc) => doc.ipfsHash || "");
-      const witnessIds = selectedAffidavitRequest.witnesses.length > 0
-        ? selectedAffidavitRequest.witnesses.map((w) => w.contactId._id.toString())
-        : ["0"];
+      const witnessIds = selectedAffidavitRequest.witnesses.map((w) => w.contactId._id.toString());
 
       const affidavitDataForHash = {
         displayId,
-        title: selectedAffidavitRequest.title,
-        category: selectedAffidavitRequest.category,
-        description: selectedAffidavitRequest.description,
-        declaration: selectedAffidavitRequest.declaration,
+        title: selectedAffidavitRequest.title || "",
+        category: selectedAffidavitRequest.category || "",
+        description: selectedAffidavitRequest.description || "",
+        declaration: selectedAffidavitRequest.declaration || "",
         issuerId: selectedAffidavitRequest.issuerId._id.toString(),
-        issuerName: selectedAffidavitRequest.issuerId.name,
-        issuerIdCardNumber: selectedAffidavitRequest.issuerId.idCardNumber,
+        issuerName: selectedAffidavitRequest.issuerId.name || "",
+        issuerIdCardNumber: selectedAffidavitRequest.issuerId.idCardNumber || "",
         issuerWalletAddress: selectedAffidavitRequest.issuerId.walletAddress || "",
         sellerId: selectedAffidavitRequest.sellerId?._id.toString() || "",
         sellerName: selectedAffidavitRequest.sellerId?.name || "",
@@ -486,19 +593,24 @@ export default function AffidavitsPage() {
         buyerWalletAddress: selectedAffidavitRequest.buyerId?.walletAddress || "",
         witnesses: selectedAffidavitRequest.witnesses.map((w) => ({
           contactId: w.contactId._id.toString(),
-          name: w.contactId.name,
-          idCardNumber: w.contactId.idCardNumber,
+          name: w.contactId.name || "",
+          idCardNumber: w.contactId.idCardNumber || "",
           walletAddress: w.contactId.walletAddress || "",
         })),
-        documents: selectedAffidavitRequest.documents,
+        documents: selectedAffidavitRequest.documents.map((doc) => ({
+          name: doc.name || "",
+          type: doc.type || "",
+          url: doc.url || "",
+          ipfsHash: doc.ipfsHash || "",
+        })),
         status: "Active",
-        dateRequested: selectedAffidavitRequest.createdAt,
+        dateRequested: selectedAffidavitRequest.createdAt ? new Date(selectedAffidavitRequest.createdAt).toISOString() : "",
         dateIssued: new Date().toISOString(),
         requestId: selectedAffidavitRequest._id,
         createdBy: selectedAffidavitRequest.createdBy._id,
       };
 
-      const dataHash = ethers.keccak256(ethers.toUtf8Bytes(JSON.stringify(affidavitDataForHash)));
+      const dataHash = generateAffidavitHash(affidavitDataForHash);
 
       console.log("Blockchain Deployment Data:", {
         affidavitId: displayId,
@@ -514,15 +626,14 @@ export default function AffidavitsPage() {
         dataHash,
       });
 
-      // Execute transaction
       let tx;
       try {
         tx = await contract.createAffidavit(
           displayId,
-          selectedAffidavitRequest.title,
-          selectedAffidavitRequest.category,
-          selectedAffidavitRequest.description,
-          selectedAffidavitRequest.declaration,
+          selectedAffidavitRequest.title || "",
+          selectedAffidavitRequest.category || "",
+          selectedAffidavitRequest.description || "",
+          selectedAffidavitRequest.declaration || "",
           selectedAffidavitRequest.issuerId._id.toString(),
           selectedAffidavitRequest.sellerId?._id.toString() || "",
           selectedAffidavitRequest.buyerId?._id.toString() || "",
@@ -543,9 +654,9 @@ export default function AffidavitsPage() {
       });
 
       const receipt = await tx.wait();
-      console.log("Transaction confirmed:", receipt);
+      console.log("Transaction processed:", receipt);
 
-      if (!receipt || !receipt.hash) {
+      if (!tx.hash || !receipt) {
         throw new Error("Failed to get transaction receipt");
       }
 
@@ -558,7 +669,6 @@ export default function AffidavitsPage() {
         duration: 5000,
       });
 
-      // Update backend
       const updateResponse = await fetch("/api/affidavits/affidavit-requests/respond", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -570,6 +680,7 @@ export default function AffidavitsPage() {
           transactionHash,
           blockNumber,
           displayId,
+          dataHash,
         }),
       });
 
@@ -583,13 +694,12 @@ export default function AffidavitsPage() {
           req._id === selectedAffidavitRequest._id
             ? { ...req, status: "accepted", issuerAccepted: true }
             : req
-        )
-      );
+        ));
 
       toast({
         title: "Success",
         description: "Affidavit accepted and deployed to blockchain successfully",
-        variant: "default",
+        variant: "success",
       });
 
       await Promise.all([fetchAffidavitRequests(), fetchAffidavits()]);
@@ -603,7 +713,6 @@ export default function AffidavitsPage() {
         duration: 5000,
       });
 
-      // Ensure affidavit request remains in pending status
       if (
         isAccepted &&
         user.activeRole === "Issuer" &&
@@ -644,7 +753,7 @@ export default function AffidavitsPage() {
     if (request.sellerId && request.sellerId._id === user._id && request.sellerAccepted !== null) return true;
     if (request.buyerId && request.buyerId._id === user._id && request.buyerAccepted !== null) return true;
     const witness = request.witnesses.find((w) => w.contactId._id === user._id);
-    return witness ? witness.hasAccepted !== null : false;
+    return witness ? Boolean(witness.hasAccepted !== null) : false;
   };
 
   const isInitiator = (request: AffidavitRequest) => {
@@ -779,8 +888,8 @@ export default function AffidavitsPage() {
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
-          <div className="flex flex-col sm:flex-row items-center gap-2">
-            <div className="flex items-center gap-2 w-full sm:w-auto">
+          <div className="flex-col sm:flex-row items-center gap-2">
+            <div className="flex items-center gap-2">
               <Filter className="h-4 w-4 text-gray-400" />
               <Select value={statusFilter} onValueChange={setStatusFilter}>
                 <SelectTrigger className="w-[180px]">
@@ -862,6 +971,15 @@ export default function AffidavitsPage() {
                           <span className="sr-only">Edit</span>
                         </Button>
                       )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 w-8 p-0"
+                        onClick={() => handleVerifyOnBlockchain(affidavit)}
+                      >
+                        <CheckCircle className="h-4 w-4" />
+                        <span className="sr-only">Verify on Blockchain</span>
+                      </Button>
                       {userRole === "Admin" && (
                         <Button
                           variant="ghost"
@@ -1188,6 +1306,57 @@ export default function AffidavitsPage() {
             {isProcessingBlockchain && (
               <p className="text-blue-500 text-sm mt-2">Processing blockchain transaction. Please wait...</p>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isVerifyDialogOpen} onOpenChange={setIsVerifyDialogOpen}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>Verify on Blockchain</DialogTitle>
+            <DialogDescription>
+              Verification results for affidavit {selectedAffidavit?.displayId}
+            </DialogDescription>
+          </DialogHeader>
+          {isProcessingBlockchain ? (
+            <p className="text-blue-500">Verifying on blockchain, please wait...</p>
+          ) : verificationResult ? (
+            <div className="space-y-4">
+              <div>
+                <Label className="font-medium">
+                  {verificationResult.isVerified ? (
+                    <span className="text-green-500">Active and Authentic</span>
+                  ) : (
+                    <span className="text-red-500">Verification Failed</span>
+                  )}
+                </Label>
+                <p>{verificationResult.message}</p>
+              </div>
+              {verificationResult.blockchainData && (
+                <div>
+                  <h3 className="text-lg font-semibold">Original Blockchain Data</h3>
+                  <div className="space-y-2 text-sm">
+                    <p><strong>IPFS Hash:</strong> {verificationResult.blockchainData.ipfsHashes[0] || "N/A"}</p>
+                    <p><strong>Title:</strong> {verificationResult.blockchainData.title}</p>
+                    <p><strong>Category:</strong> {verificationResult.blockchainData.category}</p>
+                    <p><strong>Description:</strong> {verificationResult.blockchainData.description}</p>
+                    <p><strong>Declaration:</strong> {verificationResult.blockchainData.declaration}</p>
+                    <p><strong>Issuer ID:</strong> {verificationResult.blockchainData.issuerId}</p>
+                    <p><strong>Seller ID:</strong> {verificationResult.blockchainData.sellerId}</p>
+                    <p><strong>Buyer ID:</strong> {verificationResult.blockchainData.buyerId}</p>
+                    <p><strong>Witnesses:</strong> {verificationResult.blockchainData.witnessIds?.join(", ") || "None"}</p>
+                    <p><strong>Data Hash:</strong> {verificationResult.blockchainData.dataHash}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <p>No verification data available.</p>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsVerifyDialogOpen(false)}>
+              Close
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

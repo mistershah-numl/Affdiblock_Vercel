@@ -11,7 +11,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Save, Upload, Shield, Key, AlertCircle, Check, X } from "lucide-react";
+import { Loader2, Save, Upload, Shield, Key, Check, X } from "lucide-react";
 import { ProtectedRoute } from "@/components/protected-route";
 import { toast } from "@/components/ui/use-toast";
 import Image from "next/image";
@@ -19,30 +19,32 @@ import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/lib/auth-context";
 import {
   Select,
-  SelectContent,
+   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
 
-// Helper function to generate the dynamic image URL
+// Helper function for avatar URL (direct IPFS or placeholder, no API)
+const getAvatarUrl = (path: string | null | undefined) => {
+  if (!path || !path.startsWith("https://gateway.pinata.cloud/ipfs/")) {
+    return "/placeholder.svg?height=128&width=128";
+  }
+  return path; // Direct IPFS URL
+};
+
+// Helper function for ID card images (API-based)
 const getDynamicImageUrl = (path: string | null | undefined) => {
   if (!path) {
     return "/placeholder.svg?height=128&width=128";
   }
-
-  // Check if the path is already an API URL (e.g., /api/user/get-image-dynamically?path=...)
   let cleanPath = path;
   const apiPrefix = "/api/user/get-image-dynamically?path=";
   if (path.startsWith(apiPrefix)) {
-    // Extract the actual file path from the URL
     const encodedPath = path.slice(apiPrefix.length);
     cleanPath = decodeURIComponent(encodedPath);
   }
-
-  // Remove leading slash if present
   cleanPath = cleanPath.startsWith("/") ? cleanPath.slice(1) : cleanPath;
-  // Construct the API URL without a timestamp (rely on Cache-Control: no-store)
   return `/api/user/get-image-dynamically?path=${encodeURIComponent(cleanPath)}`;
 };
 
@@ -61,7 +63,7 @@ export default function ProfilePage() {
   });
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
-  const [avatarKey, setAvatarKey] = useState(Date.now()); // Force image refresh only after upload
+  const [avatarKey, setAvatarKey] = useState(Date.now());
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
   const [currentPassword, setCurrentPassword] = useState("");
@@ -71,9 +73,18 @@ export default function ProfilePage() {
   const [passwordStrength, setPasswordStrength] = useState(0);
   const [passwordErrors, setPasswordErrors] = useState<string[]>([]);
 
-  // Memoize the ID card image URLs to prevent re-fetching unless the URLs change
+  // Memoize the ID card image URLs
   const idCardFrontUrl = useMemo(() => getDynamicImageUrl(user?.idCardFrontUrl), [user?.idCardFrontUrl]);
   const idCardBackUrl = useMemo(() => getDynamicImageUrl(user?.idCardBackUrl), [user?.idCardBackUrl]);
+
+  // Debug avatar URL
+  useEffect(() => {
+    console.log("Avatar URL:", {
+      raw: user?.avatar,
+      processed: getAvatarUrl(user?.avatar),
+      timestamp: new Date().toISOString(),
+    });
+  }, [user?.avatar]);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -90,7 +101,6 @@ export default function ProfilePage() {
         activeRole: user.activeRole || "",
       });
       setAvatarPreview(user.avatar || null);
-      // Only update avatarKey if the avatar has changed (handled in handleAvatarUpload)
     }
   }, [user, isLoading, isAuthenticated, router]);
 
@@ -230,8 +240,8 @@ export default function ProfilePage() {
         });
         setAvatarFile(null);
         setAvatarPreview(null);
-        setAvatarKey(Date.now()); // Force refresh with new key after upload
-        router.refresh(); // Refresh the page to ensure updated data
+        setAvatarKey(Date.now());
+        router.refresh();
       } else {
         toast({
           title: "Error",
@@ -380,7 +390,7 @@ export default function ProfilePage() {
                         ) : (
                           <img
                             key={avatarKey}
-                            src={getDynamicImageUrl(user.avatar)}
+                            src={getAvatarUrl(user.avatar)}
                             alt={user.name || "User"}
                             className="h-full w-full rounded-full object-cover"
                           />

@@ -391,7 +391,7 @@ export default function CreateAffidavitDialog({ open, onOpenChange }: CreateAffi
 
                 {category && (
                   <div>
-                    <Label htmlFor="stampValue" className="text-gray-700 dark:text-gray-300">Stamp Value (INR)</Label>
+                    <Label htmlFor="stampValue" className="text-gray-700 dark:text-gray-300">Stamp Value (PKR)</Label>
                     <Input id="stampValue" value={stampValue} disabled className="w-full bg-gray-100 dark:bg-gray-700" />
                   </div>
                 )}

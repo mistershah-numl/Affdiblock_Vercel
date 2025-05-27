@@ -14,7 +14,7 @@ import { toast } from "@/components/ui/use-toast";
 export default function AffidavitDetailPage() {
   const router = useRouter();
   const params = useParams();
-  const id = params.id as string;
+  const displayId = params.id as string; // Renamed for clarity, as this is displayId
   const [qrValue, setQrValue] = useState("");
   const qrRef = useRef<HTMLCanvasElement>(null);
   const [affidavit, setAffidavit] = useState<any>(null);
@@ -28,15 +28,18 @@ export default function AffidavitDetailPage() {
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      setQrValue(`${window.location.origin}/verify/${id}`);
+      setQrValue(`${window.location.origin}/verify/${displayId}`);
     }
     fetchAffidavit();
-  }, [id]);
+  }, [displayId]);
 
   const fetchAffidavit = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch(`/api/affidavits/get?id=${id}`);
+      const response = await fetch(`/api/affidavits/get?id=${displayId}`);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch affidavit: ${response.statusText}`);
+      }
       const data = await response.json();
 
       if (data.success) {
@@ -44,17 +47,13 @@ export default function AffidavitDetailPage() {
         setIsVerified(data.affidavit.isVerifiedOnBlockchain);
         setIsTampered(!data.affidavit.isVerifiedOnBlockchain);
       } else {
-        toast({
-          title: "Error",
-          description: data.error || "Failed to fetch affidavit",
-          variant: "destructive",
-        });
+        throw new Error(data.error || "Failed to fetch affidavit");
       }
     } catch (error) {
       console.error("Error fetching affidavit:", error);
       toast({
         title: "Error",
-        description: "An unexpected error occurred while fetching affidavit",
+        description: error instanceof Error ? error.message : "An unexpected error occurred while fetching affidavit",
         variant: "destructive",
       });
     } finally {
@@ -65,12 +64,22 @@ export default function AffidavitDetailPage() {
   const verifyOnBlockchain = async () => {
     try {
       setIsVerifying(true);
-      const response = await fetch(`/api/affidavits/verify?id=${id}`);
-      const data = await response.json();
+      if (!affidavit?._id) {
+        throw new Error("Affidavit ID not available. Please reload the page.");
+      }
+
+      const response = await fetch("/api/affidavits/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: affidavit._id }), // Use MongoDB _id, not displayId
+      });
 
       if (!response.ok) {
-        throw new Error(data.error || `Server responded with ${response.status}`);
+        const text = await response.text();
+        throw new Error(text || `Server responded with ${response.status}`);
       }
+
+      const data = await response.json();
 
       if (data.success) {
         setIsVerified(data.verified);
@@ -90,11 +99,7 @@ export default function AffidavitDetailPage() {
           variant: data.verified ? "default" : "destructive",
         });
       } else {
-        toast({
-          title: "Verification Failed",
-          description: data.reason || data.error || "Failed to verify affidavit",
-          variant: "destructive",
-        });
+        throw new Error(data.error || "Verification failed");
       }
     } catch (error) {
       console.error("Error verifying affidavit:", error);
@@ -194,17 +199,17 @@ export default function AffidavitDetailPage() {
     pdf.setFontSize(10);
     pdf.setTextColor(120, 120, 120);
     pdf.text("AffidBlock - Blockchain-Based Verification Platform", 105, 280, { align: "center" });
-    pdf.text(`Verify this document at ${window.location.origin}/verify/${id}`, 105, 285, { align: "center" });
+    pdf.text(`Verify this document at ${window.location.origin}/verify/${displayId}`, 105, 285, { align: "center" });
 
-    pdf.save(`Affidavit_${id}.pdf`);
+    pdf.save(`Affidavit_${displayId}.pdf`);
   };
 
   const shareAffidavit = async () => {
     if (navigator.share && window.isSecureContext) {
       try {
         await navigator.share({
-          title: `Affidavit: ${affidavit?.title || id}`,
-          text: `View and verify this affidavit: ${affidavit?.title || id}`,
+          title: `Affidavit: ${affidavit?.title || displayId}`,
+          text: `View and verify this affidavit: ${affidavit?.title || displayId}`,
           url: window.location.href,
         });
       } catch (error) {
@@ -233,20 +238,19 @@ export default function AffidavitDetailPage() {
   const handleViewProfile = async (idCard: string) => {
     try {
       const response = await fetch(`/api/user?filter=idCardNumber:${idCard}`);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch user: ${response.statusText}`);
+      }
       const data = await response.json();
       if (data.success && data.users.length > 0) {
         router.push(`/dashboard/users/${data.users[0]._id}`);
       } else {
-        toast({
-          title: "Error",
-          description: "User not found",
-          variant: "destructive",
-        });
+        throw new Error("User not found");
       }
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to fetch user profile",
+        description: error instanceof Error ? error.message : "Failed to fetch user profile",
         variant: "destructive",
       });
     }

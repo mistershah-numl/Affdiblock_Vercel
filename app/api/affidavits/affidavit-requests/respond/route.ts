@@ -4,13 +4,12 @@ import { dbConnect } from "@/lib/db";
 import AffidavitRequest from "@/lib/models/affidavit-request";
 import Affidavit from "@/lib/models/affidavit";
 import User from "@/lib/models/user";
-import { keccak256 } from "ethers";
 
 export async function POST(request: NextRequest) {
   try {
     await dbConnect();
 
-    const { requestId, userId, activeRole, action, transactionHash, blockNumber, displayId } = await request.json();
+    const { requestId, userId, activeRole, action, transactionHash, blockNumber, displayId, dataHash } = await request.json();
 
     console.log("Received request:", {
       requestId,
@@ -20,6 +19,7 @@ export async function POST(request: NextRequest) {
       transactionHash: transactionHash ? "Present" : "Not present",
       blockNumber: blockNumber ? blockNumber : "Not present",
       displayId: displayId || "Not present",
+      dataHash: dataHash || "Not present",
     });
 
     // Validate required fields
@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
           );
         }
 
-        if (transactionHash && blockNumber && displayId) {
+        if (transactionHash && blockNumber && displayId && dataHash) {
           const issuerUser = await User.findById(userId).select("walletAddress");
           if (!issuerUser) {
             return NextResponse.json(
@@ -82,61 +82,9 @@ export async function POST(request: NextRequest) {
             );
           }
 
-          const finalDisplayId = displayId; // Use provided displayId
+          const finalDisplayId = displayId;
           let ipfsHash = affidavitRequest.documents?.[0]?.ipfsHash || "";
 
-          // Prepare affidavit metadata
-          const affidavitMetadata = {
-            affidavitId: finalDisplayId,
-            title: affidavitRequest.title,
-            category: affidavitRequest.category,
-            description: affidavitRequest.description,
-            declaration: affidavitRequest.declaration,
-            issuerId: affidavitRequest.issuerId._id.toString(),
-            sellerId: affidavitRequest.sellerId?._id.toString() || "",
-            buyerId: affidavitRequest.buyerId?._id.toString() || "",
-            witnesses: affidavitRequest.witnesses.map((w) => ({
-              id: w.contactId._id.toString(),
-              walletAddress: w.contactId.walletAddress,
-            })),
-            documents: affidavitRequest.documents.map((doc) => ({
-              name: doc.name,
-              type: doc.type,
-              ipfsHash: doc.ipfsHash || null,
-            })),
-            dateRequested: affidavitRequest.createdAt,
-            dateIssued: new Date(),
-          };
-
-          // Hash all affidavit data for MongoDB
-          const affidavitDataForHash = {
-            ...affidavitMetadata,
-            issuerId: affidavitRequest.issuerId._id.toString(),
-            issuerName: affidavitRequest.issuerId.name,
-            issuerIdCardNumber: affidavitRequest.issuerId.idCardNumber,
-            issuerWalletAddress: affidavitRequest.issuerId.walletAddress,
-            sellerId: affidavitRequest.sellerId?._id.toString(),
-            sellerName: affidavitRequest.sellerId?.name,
-            sellerIdCardNumber: affidavitRequest.sellerId?.idCardNumber,
-            sellerWalletAddress: affidavitRequest.sellerId?.walletAddress,
-            buyerId: affidavitRequest.buyerId?._id.toString(),
-            buyerName: affidavitRequest.buyerId?.name,
-            buyerIdCardNumber: affidavitRequest.buyerId?.idCardNumber,
-            buyerWalletAddress: affidavitRequest.buyerId?.walletAddress,
-            witnesses: affidavitRequest.witnesses.map((w) => ({
-              contactId: w.contactId._id.toString(),
-              name: w.contactId.name,
-              idCardNumber: w.contactId.idCardNumber,
-              walletAddress: w.contactId.walletAddress,
-            })),
-            requestId: affidavitRequest._id.toString(),
-            createdBy: affidavitRequest.createdBy._id.toString(),
-            status: "Active",
-          };
-
-          const dataHash = keccak256(Buffer.from(JSON.stringify(affidavitDataForHash)));
-
-          // Create new affidavit document
           const newAffidavit = new Affidavit({
             displayId: finalDisplayId,
             title: affidavitRequest.title,
@@ -183,12 +131,11 @@ export async function POST(request: NextRequest) {
             message: "Affidavit accepted and updated with blockchain details successfully",
           });
         } else {
-          // If no blockchain data, keep status pending
           affidavitRequest.status = "pending";
           affidavitRequest.issuerAccepted = null;
           await affidavitRequest.save();
           return NextResponse.json(
-            { success: false, error: "Blockchain transaction details are required for issuer acceptance" },
+            { success: false, error: "Blockchain transaction details and dataHash are required for issuer acceptance" },
             { status: 400 }
           );
         }
@@ -218,6 +165,7 @@ export async function POST(request: NextRequest) {
         (affidavitRequest.sellerId && affidavitRequest.sellerAccepted === false) ||
         (affidavitRequest.buyerId && affidavitRequest.buyerAccepted === false) ||
         affidavitRequest.witnesses.some((w) => w.hasAccepted === false);
+
       affidavitRequest.status = anyPartyRejected ? "rejected" : "pending";
       await affidavitRequest.save();
     }

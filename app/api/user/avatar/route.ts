@@ -46,8 +46,11 @@ export async function POST(request: Request) {
     const buffer = await avatar.arrayBuffer();
     const uploadResult = await uploadFile(Buffer.from(buffer), avatar.name, avatar.type, "avatars");
 
-    // Store the API URL instead of the raw path
-    user.avatar = `/api/user/get-image-dynamically?path=${encodeURIComponent(uploadResult.url)}`;
+    // Log the upload result for debugging
+    console.log("Upload result:", { url: uploadResult.url, timestamp: new Date().toISOString() });
+
+    // Store the raw IPFS URL directly
+    user.avatar = uploadResult.url;
     await user.save();
 
     return NextResponse.json({
