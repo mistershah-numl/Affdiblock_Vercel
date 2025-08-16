@@ -1,11 +1,30 @@
-import { type NextRequest, NextResponse } from "next/server";
-import mongoose from "mongoose";
-import { dbConnect } from "@/lib/db";
-import Affidavit from "@/lib/models/affidavit";
-import { generateAffidavitHash } from "@/lib/utils/hashGenerator";
-import { ethers } from "ethers";
+import { type NextRequest, NextResponse } from "next/server"
+import mongoose from "mongoose"
+import { dbConnect } from "@/lib/db"
+import Affidavit from "@/lib/models/affidavit"
+import { generateAffidavitHash, createAffidavitDataForHash } from "@/lib/utils/hashGenerator"
+import { ethers } from "ethers"
 
 const AffidavitRegistryABI = [
+  {
+    inputs: [
+      { internalType: "string", name: "_affidavitId", type: "string" },
+      { internalType: "string", name: "_title", type: "string" },
+      { internalType: "string", name: "_category", type: "string" },
+      { internalType: "string", name: "_description", type: "string" },
+      { internalType: "string", name: "_declaration", type: "string" },
+      { internalType: "string", name: "_issuerId", type: "string" },
+      { internalType: "string", name: "_sellerId", type: "string" },
+      { internalType: "string", name: "_buyerId", type: "string" },
+      { internalType: "string[]", name: "_witnessIds", type: "string[]" },
+      { internalType: "string[]", name: "_ipfsHashes", type: "string[]" },
+      { internalType: "string", name: "_dataHash", type: "string" },
+    ],
+    name: "createAffidavit",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
   {
     inputs: [{ internalType: "string", name: "_affidavitId", type: "string" }],
     name: "getAffidavit",
@@ -22,21 +41,27 @@ const AffidavitRegistryABI = [
       { internalType: "string", name: "dataHash", type: "string" },
       { internalType: "uint256", name: "timestamp", type: "uint256" },
       { internalType: "bool", name: "onBlockchain", type: "bool" },
-      { internalType: "string[]", name: "witnessIds", type: "string[]" }, // Added
     ],
     stateMutability: "view",
     type: "function",
   },
-];
+  {
+    inputs: [{ internalType: "string", name: "_affidavitId", type: "string" }],
+    name: "getWitnesses",
+    outputs: [{ internalType: "string[]", name: "", type: "string[]" }],
+    stateMutability: "view",
+    type: "function",
+  },
+]
 
 export async function POST(request: NextRequest) {
   try {
-    await dbConnect();
+    await dbConnect()
 
-    const { id } = await request.json();
+    const { id } = await request.json()
 
     if (!id || !mongoose.Types.ObjectId.isValid(id)) {
-      return NextResponse.json({ success: false, error: "Invalid affidavit ID" }, { status: 400 });
+      return NextResponse.json({ success: false, error: "Invalid affidavit ID" }, { status: 400 })
     }
 
     const affidavit = await Affidavit.findById(id)
@@ -44,61 +69,28 @@ export async function POST(request: NextRequest) {
       .populate("sellerId", "_id name idCardNumber walletAddress")
       .populate("buyerId", "_id name idCardNumber walletAddress")
       .populate("createdBy", "_id name idCardNumber walletAddress")
-      .populate("witnesses.contactId", "_id name idCardNumber walletAddress");
+      .populate("witnesses.contactId", "_id name idCardNumber walletAddress")
 
     if (!affidavit) {
-      return NextResponse.json({ success: false, error: "Affidavit not found" }, { status: 404 });
+      return NextResponse.json({ success: false, error: "Affidavit not found" }, { status: 404 })
     }
 
-    // Prepare data for fresh hash
-    const affidavitDataForHash = {
-      displayId: affidavit.displayId || "",
-      title: affidavit.title || "",
-      category: affidavit.category || "",
-      description: affidavit.description || "",
-      declaration: affidavit.declaration || "",
-      issuerId: affidavit.issuerId?._id.toString() || "",
-      issuerName: affidavit.issuerId?.name || "",
-      issuerIdCardNumber: affidavit.issuerId?.idCardNumber || "",
-      issuerWalletAddress: affidavit.issuerId?.walletAddress || "",
-      sellerId: affidavit.sellerId?._id.toString() || "",
-      sellerName: affidavit.sellerId?.name || "",
-      sellerIdCardNumber: affidavit.sellerId?.idCardNumber || "",
-      sellerWalletAddress: affidavit.sellerId?.walletAddress || "",
-      buyerId: affidavit.buyerId?._id.toString() || "",
-      buyerName: affidavit.buyerId?.name || "",
-      buyerIdCardNumber: affidavit.buyerId?.idCardNumber || "",
-      buyerWalletAddress: affidavit.buyerId?.walletAddress || "",
-      witnesses: (affidavit.witnesses || []).map((w) => ({
-        contactId: w.contactId?._id.toString() || "",
-        name: w.contactId?.name || "",
-        idCardNumber: w.contactId?.idCardNumber || "",
-        walletAddress: w.contactId?.walletAddress || "",
-      })),
-      documents: (affidavit.documents || []).map((doc) => ({
-        name: doc.name || "",
-        type: doc.type || "",
-        url: doc.url || "",
-        ipfsHash: doc.ipfsHash || "",
-      })),
-      status: affidavit.status || "Active",
-      dateRequested: affidavit.dateRequested ? new Date(affidavit.dateRequested).toISOString() : "",
-      dateIssued: affidavit.dateIssued ? new Date(affidavit.dateIssued).toISOString() : "",
-      requestId: affidavit.requestId?.toString() || "",
-      createdBy: affidavit.createdBy?._id.toString() || "",
-    };
+    const affidavitDataForHash = createAffidavitDataForHash(affidavit)
 
-    const freshDataHash = generateAffidavitHash(affidavitDataForHash);
+    const freshDataHash = generateAffidavitHash(affidavitDataForHash)
+    console.log("[v0] Verification Input Data:", JSON.stringify(affidavitDataForHash, null, 2))
+    console.log("[v0] Fresh Data Hash:", freshDataHash)
+    console.log("[v0] Stored MongoDB Data Hash:", affidavit.dataHash)
 
-    // Fetch blockchain data
-    let blockchainData = null;
-    let originalData = null;
+    let blockchainData = null
+    let originalData = null
     try {
-      const provider = new ethers.JsonRpcProvider("http://127.0.0.1:7545"); // Ganache
-      const contractAddress = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || "0xED7864989c1f88481C5Ac0242F263DC4CE2D427d";
-      const contract = new ethers.Contract(contractAddress, AffidavitRegistryABI, provider);
+      const provider = new ethers.JsonRpcProvider(process.env.NEXT_PUBLIC_GANACHE_RPC_URL || "http://127.0.0.1:7545")
+      const contractAddress = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || "0xED7864989c1f88481C5Ac0242F263DC4CE2D427d"
+      const contract = new ethers.Contract(contractAddress, AffidavitRegistryABI, provider)
 
-      const bcData = await contract.getAffidavit(affidavit.displayId);
+      const bcData = await contract.getAffidavit(affidavit.displayId)
+      const witnessIds = await contract.getWitnesses(affidavit.displayId)
       blockchainData = {
         affidavitId: bcData[0],
         title: bcData[1],
@@ -112,64 +104,47 @@ export async function POST(request: NextRequest) {
         dataHash: bcData[9],
         timestamp: Number(bcData[10]),
         onBlockchain: bcData[11],
-      };
-    } catch (error) {
-      console.error("Error fetching blockchain data:", error);
-    }
-
-    // Fetch IPFS data via Pinata
-    let pinataData = null;
-    if (affidavit.ipfsHash) {
-      try {
-        const pinataResponse = await fetch(`https://gateway.pinata.cloud/ipfs/${affidavit.ipfsHash}`);
-        if (pinataResponse.ok) {
-          pinataData = await pinataResponse.json();
-        }
-      } catch (error) {
-        console.error("Error fetching Pinata data:", error);
+        witnessIds: witnessIds || [],
       }
+      console.log("Blockchain Data:", blockchainData)
+    } catch (error) {
+      console.error("Error fetching blockchain data:", error)
+      throw new Error("Failed to fetch blockchain data")
     }
 
-    // Verify hashes
-    const isVerified = blockchainData
-      ? freshDataHash === blockchainData.dataHash && freshDataHash === affidavit.dataHash
-      : freshDataHash === affidavit.dataHash;
-    const isTampered = !isVerified;
+    const isVerified = blockchainData.dataHash.toLowerCase() === affidavit.dataHash.toLowerCase()
+    const isFreshHashValid = blockchainData.dataHash.toLowerCase() === freshDataHash.toLowerCase()
+    const isTampered = !isVerified || !isFreshHashValid
 
-    // Update affidavit verification status
-    affidavit.isVerifiedOnBlockchain = isVerified;
-    await affidavit.save();
+    affidavit.isVerifiedOnBlockchain = isVerified && isFreshHashValid
+    await affidavit.save()
 
-    // Prepare original data if tampered
-    if (isTampered && (pinataData || blockchainData)) {
+    if (isTampered) {
       originalData = {
-        ipfsHash: affidavit.ipfsHash || "N/A",
-        title: pinataData?.title || blockchainData?.title || "N/A",
-        category: pinataData?.category || blockchainData?.category || "N/A",
-        description: pinataData?.description || blockchainData?.description || "N/A",
-        declaration: pinataData?.declaration || blockchainData?.declaration || "N/A",
-        issuerId: pinataData?.issuerId || blockchainData?.issuerId || "N/A",
-        sellerId: pinataData?.sellerId || blockchainData?.sellerId || "N/A",
-        buyerId: pinataData?.buyerId || blockchainData?.buyerId || "N/A",
-        witnesses: pinataData?.witnesses || blockchainData?.witnessIds || [],
-        documents: pinataData?.documents || blockchainData?.ipfsHashes || [],
-        dataHash: blockchainData?.dataHash || affidavit.dataHash || "N/A",
-      };
+        affidavitId: blockchainData.affidavitId,
+        title: blockchainData.title,
+        category: blockchainData.category,
+        description: blockchainData.description,
+        declaration: blockchainData.declaration,
+        issuerId: blockchainData.issuerId,
+        sellerId: blockchainData.sellerId,
+        buyerId: blockchainData.buyerId,
+        witnessIds: blockchainData.witnessIds,
+        ipfsHashes: blockchainData.ipfsHashes,
+        dataHash: blockchainData.dataHash,
+        timestamp: blockchainData.timestamp,
+      }
     }
 
     return NextResponse.json({
       success: true,
-      verified: isVerified,
+      verified: isVerified && isFreshHashValid,
       isTampered,
       blockchainData,
-      pinataData,
       originalData,
-    });
+    })
   } catch (error: any) {
-    console.error("Error in POST /api/affidavits/verify:", error);
-    return NextResponse.json(
-      { success: false, error: error.message || "Internal server error" },
-      { status: 500 }
-    );
+    console.error("Error in POST /api/affidavits/verify:", error)
+    return NextResponse.json({ success: false, error: error.message || "Internal server error" }, { status: 500 })
   }
 }

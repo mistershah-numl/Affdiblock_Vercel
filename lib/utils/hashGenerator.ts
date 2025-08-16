@@ -1,86 +1,123 @@
-import { ethers } from "ethers";
+import crypto from "crypto"
 
-// Interface for affidavit data to ensure consistent structure
-interface AffidavitData {
-  displayId: string;
-  title: string;
-  category: string;
-  description: string;
-  declaration: string;
-  issuerId: string;
-  issuerName: string;
-  issuerIdCardNumber: string;
-  issuerWalletAddress: string;
-  sellerId: string;
-  sellerName: string;
-  sellerIdCardNumber: string;
-  sellerWalletAddress: string;
-  buyerId: string;
-  buyerName: string;
-  buyerIdCardNumber: string;
-  buyerWalletAddress: string;
-  witnesses: Array<{
-    contactId: string;
-    name: string;
-    idCardNumber: string;
-    walletAddress: string;
-  }>;
-  documents: Array<{
-    name: string;
-    type: string;
-    url: string;
-    ipfsHash?: string;
-  }>;
-  status: string;
-  dateRequested: string | Date;
-  dateIssued: string | Date;
-  requestId: string;
-  createdBy: string;
+// Simple interface for core affidavit data only
+interface CoreAffidavitData {
+  displayId: string
+  title: string
+  category: string
+  description: string
+  declaration: string
+  issuerIdCardNumber: string
+  sellerIdCardNumber: string
+  buyerIdCardNumber: string
 }
 
-// Utility function to generate a consistent dataHash
-export function generateAffidavitHash(data: AffidavitData): string {
-  // Normalize and structure the data
-  const normalizedData = {
-    displayId: data.displayId || "",
-    title: data.title || "",
-    category: data.category || "",
-    description: data.description || "",
-    declaration: data.declaration || "",
-    issuerId: data.issuerId || "",
-    issuerName: data.issuerName || "",
-    issuerIdCardNumber: data.issuerIdCardNumber || "",
-    issuerWalletAddress: data.issuerWalletAddress || "",
-    sellerId: data.sellerId || "",
-    sellerName: data.sellerName || "",
-    sellerIdCardNumber: data.sellerIdCardNumber || "",
-    sellerWalletAddress: data.sellerWalletAddress || "",
-    buyerId: data.buyerId || "",
-    buyerName: data.buyerName || "",
-    buyerIdCardNumber: data.buyerIdCardNumber || "",
-    buyerWalletAddress: data.buyerWalletAddress || "",
-    witnesses: (data.witnesses || []).map((w) => ({
-      contactId: w.contactId || "",
-      name: w.name || "",
-      idCardNumber: w.idCardNumber || "",
-      walletAddress: w.walletAddress || "",
-    })),
-    documents: (data.documents || []).map((doc) => ({
-      name: doc.name || "",
-      type: doc.type || "",
-      url: doc.url || "",
-      ipfsHash: doc.ipfsHash || "",
-    })),
-    status: data.status || "Active",
-    dateRequested: data.dateRequested ? new Date(data.dateRequested).toISOString() : "",
-    dateIssued: data.dateIssued ? new Date(data.dateIssued).toISOString() : "",
-    requestId: data.requestId || "",
-    createdBy: data.createdBy || "",
-  };
+export function generateAffidavitHash(data: any): string {
+  // Extract only the core fields you specified
+  const coreData: CoreAffidavitData = {
+    displayId: String(data.displayId || "").trim(),
+    title: String(data.title || "").trim(),
+    category: String(data.category || "").trim(),
+    description: String(data.description || "").trim(),
+    declaration: String(data.declaration || "").trim(),
+    // Only ID card numbers of buyer, seller, and issuer
+    issuerIdCardNumber: extractIdCardNumber(data, "issuer"),
+    sellerIdCardNumber: extractIdCardNumber(data, "seller"),
+    buyerIdCardNumber: extractIdCardNumber(data, "buyer"),
+  }
 
-  // Stringify with consistent formatting and sorted keys
-  const dataString = JSON.stringify(normalizedData, Object.keys(normalizedData).sort());
+  // Create deterministic string by sorting keys
+  const sortedKeys = Object.keys(coreData).sort()
+  const dataString = sortedKeys.map((key) => `${key}:${coreData[key as keyof CoreAffidavitData]}`).join("|")
 
-  // Generate hash using ethers
-  return ethers.keccak256(ethers.toUtf8Bytes(dataString));
+  // Generate SHA256 hash
+  const hash = crypto.createHash("sha256").update(dataString).digest("hex")
+  const hashWithPrefix = `0x${hash}`
+
+  console.log("[v0] Hash Generation Debug:", {
+    coreData,
+    dataString,
+    generatedHash: hashWithPrefix,
+  })
+
+  return hashWithPrefix
+}
+
+function extractIdCardNumber(data: any, role: "issuer" | "seller" | "buyer"): string {
+  const roleId = `${role}Id`
+  const roleIdCardNumber = `${role}IdCardNumber`
+
+  // Try different ways to get the ID card number
+  // 1. From nested object with idCardNumber property
+  if (data[roleId] && typeof data[roleId] === "object" && data[roleId].idCardNumber) {
+    return String(data[roleId].idCardNumber).trim()
+  }
+
+  // 2. From direct property
+  if (data[roleIdCardNumber]) {
+    return String(data[roleIdCardNumber]).trim()
+  }
+
+  // 3. From string ID (fallback for populated objects)
+  if (data[roleId] && typeof data[roleId] === "string") {
+    return String(data[roleId]).trim()
+  }
+
+  return ""
+}
+
+export function createAffidavitDataForHash(affidavit: any, overrideDisplayId?: string): any {
+  console.log(
+    "[v0] createAffidavitDataForHash input:",
+    JSON.stringify(
+      {
+        displayId: affidavit.displayId,
+        overrideDisplayId,
+        title: affidavit.title,
+        category: affidavit.category,
+        description: affidavit.description,
+        declaration: affidavit.declaration,
+        issuerId: affidavit.issuerId,
+        sellerId: affidavit.sellerId,
+        buyerId: affidavit.buyerId,
+      },
+      null,
+      2,
+    ),
+  )
+
+  // Helper function to extract ID card number from various data structures
+  const getIdCardNumber = (userObj: any, fallbackField?: string): string => {
+    if (!userObj) return ""
+
+    // If it's a populated object with idCardNumber
+    if (typeof userObj === "object" && userObj.idCardNumber) {
+      return String(userObj.idCardNumber).trim()
+    }
+
+    // If it's just a string ID
+    if (typeof userObj === "string") {
+      return fallbackField ? String(affidavit[fallbackField] || "").trim() : ""
+    }
+
+    return ""
+  }
+
+  const result = {
+    displayId: overrideDisplayId || affidavit.displayId || "",
+    title: affidavit.title || "",
+    category: affidavit.category || "",
+    description: affidavit.description || "",
+    declaration: affidavit.declaration || "",
+    issuerId: affidavit.issuerId,
+    sellerId: affidavit.sellerId,
+    buyerId: affidavit.buyerId,
+    issuerIdCardNumber: getIdCardNumber(affidavit.issuerId, "issuerIdCardNumber"),
+    sellerIdCardNumber: getIdCardNumber(affidavit.sellerId, "sellerIdCardNumber"),
+    buyerIdCardNumber: getIdCardNumber(affidavit.buyerId, "buyerIdCardNumber"),
+  }
+
+  console.log("[v0] API affidavitDataForHash:", JSON.stringify(result, null, 2))
+
+  return result
 }

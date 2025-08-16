@@ -40,7 +40,7 @@ interface AccountSettings {
   sessionTimeout: string;
 }
 
-interface BlockchainSettings {
+interface BlockchainSettings { // alina -> all about wallets connectin and disconnection
   walletAddress: string;
   network: string;
   balance: string;

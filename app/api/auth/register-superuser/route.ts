@@ -14,9 +14,9 @@ export async function POST() {
 
     // Create the superuser
     const user = new User({
-      name: "Dummy",
-      email: "dummy@dummy.com",
-      password: "Dumy123?",
+      name: "issuer",
+      email: "issuer@issuer.com",
+      password: "issuer",
       idCardNumber: "1264567890123",
       idCardFrontUrl: "https://example.com/dummy-id-front.jpg", // Dummy URL
       idCardBackUrl: "https://example.com/dummy-id-back.jpg",  // Dummy URL
@@ -24,19 +24,19 @@ export async function POST() {
       timezone: "UTC+0",
       sessionTimeout: 30,
       status: "Active",
-      roles: ["Issuer","Admin"],
+      roles: ["Issuer"],
       activeRole: "Issuer",
     })
 
-    console.log("Dummy object before saving:", user.toObject())
+    console.log("issuer object before saving:", user.toObject())
 
     await user.save()
 
-    console.log("Dummy saved to database:", await User.findOne({ email: "dummy@dummy.com" }))
+    console.log("issuer saved to database:", await User.findOne({ email: "issuer@issuer.com" }))
 
     return NextResponse.json({
       success: true,
-      message: "Dummy created successfully. Please log in with email: superuser@super.com and passwordord: Dumy123??",
+      message: "issuer created successfully. Please log in with email: issuer@issuer.com and passwordord: issuer",
     })
   } catch (error) {
     console.error("Error creating Dymmy:", error)
