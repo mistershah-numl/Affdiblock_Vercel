@@ -39,13 +39,16 @@ export const uploadFileToIPFSOnServer = async (filePath: string): Promise<string
   }
 };
 
-export const uploadFileToIPFS = async (file: File): Promise<string> => {
+export const uploadFileToIPFS = async (file: File, metadata?: { name: string; folderId: string }): Promise<string> => {
   try {
     // Convert File to Buffer
     const buffer = Buffer.from(await file.arrayBuffer());
 
     const formData = new FormData();
     formData.append("file", buffer, { filename: file.name });
+    if (metadata) {
+      formData.append("pinataMetadata", JSON.stringify(metadata));
+    }
 
     const pinataApiKey = process.env.NEXT_PUBLIC_PINATA_API_KEY;
     const pinataApiSecret = process.env.NEXT_PUBLIC_PINATA_API_SECRET;

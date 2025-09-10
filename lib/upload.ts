@@ -2,6 +2,14 @@ import { uploadFileToIPFS } from "./services/ipfs-service";
 
 export type StorageLocation = "id-cards" | "documents" | "licenses" | "avatars";
 
+// Map storage locations to environment variable names for Pinata folder IDs
+const folderEnvVars: Record<StorageLocation, string> = {
+  "id-cards": "NEXT_PUBLIC_PINATA_FOLDER_CNIC",
+  documents: "NEXT_PUBLIC_PINATA_FOLDER_AFFIDAVITS",
+  licenses: "NEXT_PUBLIC_PINATA_FOLDER_LICENSES",
+  avatars: "NEXT_PUBLIC_PINATA_FOLDER_AVATARS",
+};
+
 export interface UploadResult {
   url: string;
   filename: string;
@@ -11,19 +19,21 @@ export interface UploadResult {
 }
 
 /**
- * Uploads a file to Pinata (IPFS)
+ * Uploads a file to Pinata (IPFS) in a specific folder with a custom filename
  * @param file The file buffer to upload
  * @param originalFilename Original filename
  * @param contentType MIME type
  * @param location The storage location/folder
+ * @param idCardNumber Optional identifier for naming files (e.g., idCardNumber for id-cards, licenseNumber for licenses)
  * @returns Promise with the upload result
- * @throws Error if file validation fails or upload operation encounters an issue
+ * @throws Error if file validation fails, folder ID is missing, or upload operation encounters an issue
  */
 export async function uploadFile(
   file: Buffer,
   originalFilename: string,
   contentType: string,
-  location: StorageLocation
+  location: StorageLocation,
+  idCardNumber?: string
 ): Promise<UploadResult> {
   // Validate file size (max 5MB)
   const maxSize = 5 * 1024 * 1024; // 5MB in bytes
@@ -37,51 +47,68 @@ export async function uploadFile(
     throw new Error(`Invalid file type. Only JPEG, PNG, and PDF are allowed for ${location}`);
   }
   const allowedImageTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
-  if ((location === "avatars" || location === "id-cards") && !allowedImageTypes.includes(contentType)) {
+  if ((location === "id-cards" || location === "avatars" || location === "licenses") && !allowedImageTypes.includes(contentType)) {
     throw new Error(`Invalid file type. Only JPEG, PNG, GIF, and WebP images are allowed for ${location}`);
   }
 
-  // Create a File-like object for Pinata upload
-  const fileObj = new File([file], originalFilename, { type: contentType });
+  // Get folder ID from environment variables
+  const folderId = process.env[folderEnvVars[location]];
+  if (!folderId) {
+    throw new Error(`Folder ID for ${location} is not configured in environment variables`);
+  }
 
-  // Upload to Pinata
+  // Determine filename
+  let filename = originalFilename;
+  if (location === "id-cards" && idCardNumber) {
+    // For ID cards, use idCardNumber_front or idCardNumber_back
+    const ext = originalFilename.toLowerCase().endsWith("_front") || originalFilename.includes("_front")
+      ? "_front"
+      : "_back";
+    filename = `${idCardNumber}${ext}.${contentType.split("/")[1]}`;
+  } else if (location === "licenses" && idCardNumber) {
+    // For licenses, use idCardNumber (or licenseNumber) without _front/_back
+    filename = `${idCardNumber}.${contentType.split("/")[1]}`;
+  } else if (location === "documents" && idCardNumber) {
+    // For documents (affidavits), use idCardNumber or a timestamp
+    filename = `${idCardNumber || Date.now()}.${contentType.split("/")[1]}`;
+  }
+
+  // Create a File-like object for Pinata upload
+  const fileObj = new File([file], filename, { type: contentType });
+
+  // Upload to Pinata with folder metadata
   try {
+    const formData = new FormData();
+    formData.append("file", fileObj);
+    formData.append(
+      "pinataMetadata",
+      JSON.stringify({
+        name: filename,
+        folderId: folderId, // Use folder ID from environment variable
+      })
+    );
+
     const ipfsHash = await uploadFileToIPFS(fileObj);
     const url = `https://gateway.pinata.cloud/ipfs/${ipfsHash}`;
 
     return {
       url,
-      filename: originalFilename,
+      filename,
       contentType,
       size: file.length,
       ipfsHash,
     };
   } catch (error: any) {
-    console.error(`Error uploading file to Pinata:`, error);
+    console.error(`Error uploading file to Pinata for ${location}:`, {
+      message: error.message,
+      filename,
+      folderId,
+    });
     throw new Error(`Failed to upload file to Pinata: ${error.message}`);
   }
 }
+
 /**
- * Note: This implementation stores files locally in the public/uploads directory.
- * For production, consider using a cloud storage solution like AWS S3 to handle
- * file uploads for better scalability and persistence. Example configuration:
- *
- * import AWS from "aws-sdk";
- * const s3 = new AWS.S3({
- *   accessKeyId: process.env.AWS_ACCESS_KEY_ID,
- *   secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
- *   region: process.env.AWS_REGION,
- * });
- *
- * export async function uploadFile(file: Buffer, originalFilename: string, contentType: string, location: StorageLocation) {
- *   const params = {
- *     Bucket: process.env.AWS_S3_BUCKET_NAME,
- *     Key: `${location}/${Date.now()}-${originalFilename}`,
- *     Body: file,
- *     ContentType: contentType,
- *     ACL: "public-read",
- *   };
- *   const { Location } = await s3.upload(params).promise();
- *   return { url: Location, filename: originalFilename, contentType, size: file.length };
- * }
+ * Note: This implementation stores files on Pinata (IPFS) in specific folders using folder IDs from environment variables.
+ * For production, ensure all folder IDs are correctly configured in .env.local.
  */

@@ -1,0 +1,29 @@
+1. Completed
+2. Login
+3. Signup
+4. edit profile
+5. change profile pic
+6. Create New Affidavit
+   - checks wallet connection
+   - All Parties Accept
+   - If any non issuer user reject , it is rejected
+   - if any issuer rejects , its rejected
+   - if rejected not added to Affidavits Collection
+   1. If All Accepted
+      - save data and hash of data to Blockchain
+      - save data and BC , TRX details to Mongodb
+      - Yes , Hash Matches
+7. Verify
+   - donot show car details yet ,
+   - show data from mongodb and in bg , take hash of data and compare with that    of stored in blockchain
+   - if matches , show authenticity batch
+   - if not match ,show "show original affidavit" button
+   - when clicked button , popup page having original data from BC
+   - user can see and download original data pdf , having qr code etc
+   - if not tempered , user can download pdf or print affidavit pdf
+============= TO BE COMPLETED ==========
+-> Show user profile (diff to diff roles)
+-> ban user and issuer (for admin)
+-> mark affidavit status
+-> mark user fake  (admin/issuer)
+-> transforming it into online database (Cloud DB)
