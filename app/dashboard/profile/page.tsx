@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Save, Upload, Shield, Key, Check, X } from "lucide-react";
@@ -19,33 +19,18 @@ import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/lib/auth-context";
 import {
   Select,
-   SelectContent,
+  SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
 
-// Helper function for avatar URL (direct IPFS or placeholder, no API)
+// Helper function for avatar URL (direct IPFS or placeholder)
 const getAvatarUrl = (path: string | null | undefined) => {
   if (!path || !path.startsWith("https://gateway.pinata.cloud/ipfs/")) {
     return "/placeholder.svg?height=128&width=128";
   }
   return path; // Direct IPFS URL
-};
-
-// Helper function for ID card images (API-based)
-const getDynamicImageUrl = (path: string | null | undefined) => {
-  if (!path) {
-    return "/placeholder.svg?height=128&width=128";
-  }
-  let cleanPath = path;
-  const apiPrefix = "/api/user/get-image-dynamically?path=";
-  if (path.startsWith(apiPrefix)) {
-    const encodedPath = path.slice(apiPrefix.length);
-    cleanPath = decodeURIComponent(encodedPath);
-  }
-  cleanPath = cleanPath.startsWith("/") ? cleanPath.slice(1) : cleanPath;
-  return `/api/user/get-image-dynamically?path=${encodeURIComponent(cleanPath)}`;
 };
 
 export default function ProfilePage() {
@@ -73,18 +58,21 @@ export default function ProfilePage() {
   const [passwordStrength, setPasswordStrength] = useState(0);
   const [passwordErrors, setPasswordErrors] = useState<string[]>([]);
 
-  // Memoize the ID card image URLs
-  const idCardFrontUrl = useMemo(() => getDynamicImageUrl(user?.idCardFrontUrl), [user?.idCardFrontUrl]);
-  const idCardBackUrl = useMemo(() => getDynamicImageUrl(user?.idCardBackUrl), [user?.idCardBackUrl]);
+  // Memoize image URLs to prevent refetching on tab switch
+  const avatarUrl = useMemo(() => getAvatarUrl(user?.avatar), [user?.avatar]);
+  const idCardFrontUrl = useMemo(() => user?.idCardFrontUrl || "/placeholder.svg?height=128&width=128", [user?.idCardFrontUrl]);
+  const idCardBackUrl = useMemo(() => user?.idCardBackUrl || "/placeholder.svg?height=128&width=128", [user?.idCardBackUrl]);
 
-  // Debug avatar URL
+  // Debug image URLs
   useEffect(() => {
-    console.log("Avatar URL:", {
-      raw: user?.avatar,
-      processed: getAvatarUrl(user?.avatar),
+    console.log("Profile URLs:", {
+      avatar: user?.avatar,
+      avatarProcessed: avatarUrl,
+      idCardFront: idCardFrontUrl,
+      idCardBack: idCardBackUrl,
       timestamp: new Date().toISOString(),
     });
-  }, [user?.avatar]);
+  }, [avatarUrl, idCardFrontUrl, idCardBackUrl]);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -236,12 +224,13 @@ export default function ProfilePage() {
         updateUser(data.user);
         toast({
           title: "Avatar updated",
-          description: "Your profile picture has been uploaded successfully.",
+          description: "Your profile picture has been uploaded successfully. Reloading page...",
         });
         setAvatarFile(null);
         setAvatarPreview(null);
         setAvatarKey(Date.now());
-        router.refresh();
+        // Force full page reload to fetch updated data
+        window.location.reload();
       } else {
         toast({
           title: "Error",
@@ -378,7 +367,7 @@ export default function ProfilePage() {
               <CardContent className="space-y-6">
                 <div className="flex flex-col md:flex-row gap-6">
                   <div className="flex flex-col items-center space-y-4">
-                    {avatarPreview || user.avatar ? (
+                    {avatarPreview || avatarUrl !== "/placeholder.svg?height=128&width=128" ? (
                       <div className="relative h-32 w-32 overflow-hidden rounded-full">
                         {avatarPreview ? (
                           <img
@@ -390,7 +379,7 @@ export default function ProfilePage() {
                         ) : (
                           <img
                             key={avatarKey}
-                            src={getAvatarUrl(user.avatar)}
+                            src={avatarUrl}
                             alt={user.name || "User"}
                             className="h-full w-full rounded-full object-cover"
                           />
@@ -416,7 +405,7 @@ export default function ProfilePage() {
                         onClick={() => avatarInputRef.current?.click()}
                       >
                         <Upload className="h-4 w-4" />
-                        <span>{user.avatar ? "Change Photo" : "Upload Photo"}</span>
+                        <span>{avatarUrl !== "/placeholder.svg?height=128&width=128" ? "Change Photo" : "Upload Photo"}</span>
                       </Button>
                       {avatarFile && (
                         <Button
@@ -518,7 +507,7 @@ export default function ProfilePage() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label>ID Card Front</Label>
-                        {user.idCardFrontUrl ? (
+                        {idCardFrontUrl !== "/placeholder.svg?height=128&width=128" ? (
                           <div className="relative h-48 w-full">
                             <Image
                               src={idCardFrontUrl}
@@ -534,7 +523,7 @@ export default function ProfilePage() {
                       </div>
                       <div className="space-y-2">
                         <Label>ID Card Back</Label>
-                        {user.idCardBackUrl ? (
+                        {idCardBackUrl !== "/placeholder.svg?height=128&width=128" ? (
                           <div className="relative h-48 w-full">
                             <Image
                               src={idCardBackUrl}
