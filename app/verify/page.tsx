@@ -1,96 +1,202 @@
+
 "use client"
 
 import type React from "react"
-
-import { useState } from "react"
-
-// Dynamically import the QR scanner component with no SSR
-// const QrReader = dynamic(() => import("react-qr-reader"), {
-//   ssr: false,
-// })
+import { useState, useEffect, useRef } from "react"
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { FileSearch, QrCode, Search, Camera } from "lucide-react"
+import { BrowserQRCodeReader } from "@zxing/library"
 
 export default function VerifyPage() {
   const [affidavitId, setAffidavitId] = useState("")
   const [scanResult, setScanResult] = useState("")
   const [isVerifying, setIsVerifying] = useState(false)
   const [verificationResult, setVerificationResult] = useState<null | {
-    isValid: boolean
-    message: string
-    details?: any
+    success: boolean
+    verified: boolean
+    isTampered: boolean
+    blockchainData: any
+    originalData?: any
+    error?: string
   }>(null)
   const [cameraActive, setCameraActive] = useState(false)
+  const [cameraError, setCameraError] = useState<string | null>(null)
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const codeReader = useRef<BrowserQRCodeReader | null>(null)
+  const streamRef = useRef<MediaStream | null>(null)
+  const [isMediaDevicesSupported, setIsMediaDevicesSupported] = useState<boolean | null>(null)
+
+  // Check for MediaDevices support on mount
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setIsMediaDevicesSupported(!!navigator?.mediaDevices && !!navigator?.mediaDevices.getUserMedia);
+    }
+  }, []);
+
+  // Initialize QR code reader and handle camera permissions
+  useEffect(() => {
+    if (isMediaDevicesSupported === null) return; // Wait for check
+
+    if (!isMediaDevicesSupported) {
+      console.log("MediaDevices API is not supported in this browser");
+      setCameraError("Camera access is not supported in this browser. Please use a modern browser like Chrome, Edge, or Safari, or try manual verification.");
+      setCameraActive(false);
+      return;
+    }
+
+    codeReader.current = new BrowserQRCodeReader();
+
+    if (cameraActive && videoRef.current) {
+      console.log("Requesting camera access...");
+      navigator.mediaDevices
+        .getUserMedia({ video: { facingMode: "environment" } })
+        .then((stream) => {
+          console.log("Camera access granted");
+          streamRef.current = stream;
+          if (videoRef.current) {
+            videoRef.current.srcObject = stream;
+            videoRef.current.play().catch((err) => {
+              console.error("Error playing video:", err);
+              setCameraError("Failed to start camera: " + err.message);
+              setCameraActive(false);
+            });
+            startScanning();
+          }
+        })
+        .catch((err) => {
+          console.error("Camera access error:", err);
+          setCameraError(
+            err.name === "NotAllowedError"
+              ? "Camera access denied. Please allow camera access in your browser or device settings."
+              : err.name === "NotFoundError"
+              ? "No camera found on this device. Please use manual verification."
+              : "Failed to access camera: " + err.message
+          );
+          setCameraActive(false);
+        });
+    }
+
+    return () => {
+      console.log("Cleaning up QR code reader");
+      if (cameraActive && codeReader.current) {
+        codeReader.current.reset();
+      }
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => track.stop());
+        streamRef.current = null;
+      }
+    };
+  }, [cameraActive, isMediaDevicesSupported]);
+
+  const startScanning = async () => {
+    if (!codeReader.current || !videoRef.current) {
+      console.error("QR code reader or video element not initialized");
+      setCameraError("QR scanner initialization failed");
+      setCameraActive(false);
+      return;
+    }
+
+    console.log("Starting QR code scanning...");
+    try {
+      await codeReader.current.decodeFromVideoDevice(
+        undefined,
+        videoRef.current,
+        (result, error) => {
+          if (result) {
+            console.log("QR code scanned:", result.getText());
+            handleScan(result.getText());
+          }
+          if (error && error.name !== "StreamError") {
+            console.error("QR scan error:", error);
+            setCameraError("QR scan error: " + error.message);
+            setCameraActive(false);
+          }
+        }
+      );
+    } catch (err) {
+      console.error("Error during QR scanning:", err);
+      setCameraError("QR scan error: " + (err as Error).message);
+      setCameraActive(false);
+    }
+  };
 
   const handleManualVerify = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!affidavitId) return
+    e.preventDefault();
+    if (!affidavitId) {
+      console.log("No affidavit ID provided for manual verification");
+      return;
+    }
 
-    setIsVerifying(true)
+    console.log("Verifying affidavit ID:", affidavitId);
+    setIsVerifying(true);
+    try {
+      const response = await fetch("/api/affidavits/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: affidavitId }),
+      });
+      const data = await response.json();
+      console.log("Verification result:", data);
+      setVerificationResult(data);
+    } catch (error) {
+      console.error("Verification error:", error);
+      setVerificationResult({
+        success: false,
+        verified: false,
+        isTampered: true,
+        blockchainData: null,
+        error: "Failed to verify affidavit",
+      });
+    } finally {
+      setIsVerifying(false);
+    }
+  };
 
-    // Simulate blockchain verification
-    setTimeout(() => {
-      // Mock verification result - in a real app, this would check the blockchain
-      const mockResult = {
-        isValid: true,
-        message: "Document verified successfully on the blockchain",
-        details: {
-          id: affidavitId,
-          title: "Affidavit of Ownership Transfer",
-          issuer: "John Doe",
-          category: "Car",
-          dateIssued: "2025-03-01",
-          status: "Active",
-          stampValue: "RS 100",
-        },
-      }
-
-      setVerificationResult(mockResult)
-      setIsVerifying(false)
-    }, 1500)
-  }
-
-  // Simulate QR code scanning with a mock function
-  const simulateScan = () => {
-    setCameraActive(true)
-
-    // Simulate a scan after 2 seconds
-    setTimeout(() => {
-      const mockQrValue = `https://affidblock.com/verify/AFF-2025-001`
-      setScanResult(mockQrValue)
+  const handleScan = async (data: string | null) => {
+    if (data) {
+      console.log("Processing scanned QR code:", data);
+      setScanResult(data);
+      setCameraActive(false);
 
       // Extract affidavit ID from QR code URL
-      const idMatch = mockQrValue.match(/\/verify\/([a-zA-Z0-9-]+)/)
+      const idMatch = data.match(/\/verify\/([a-zA-Z0-9-]+)/);
       if (idMatch && idMatch[1]) {
-        setAffidavitId(idMatch[1])
+        setAffidavitId(idMatch[1]);
+        console.log("Extracted affidavit ID:", idMatch[1]);
 
         // Auto-verify after scan
-        setIsVerifying(true)
-        setTimeout(() => {
-          const mockResult = {
-            isValid: true,
-            message: "Document verified successfully on the blockchain",
-            details: {
-              id: idMatch[1],
-              title: "Affidavit of Ownership Transfer",
-              issuer: "John Doe",
-              category: "Car",
-              dateIssued: "2025-03-01",
-              status: "Active",
-              stampValue: "RS 100",
-            },
-          }
-
-          setVerificationResult(mockResult)
-          setIsVerifying(false)
-          setCameraActive(false)
-        }, 1500)
+        setIsVerifying(true);
+        try {
+          const response = await fetch("/api/affidavits/verify", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id: idMatch[1] }),
+          });
+          const result = await response.json();
+          console.log("Verification result from QR scan:", result);
+          setVerificationResult(result);
+        } catch (error) {
+          console.error("Verification error from QR scan:", error);
+          setVerificationResult({
+            success: false,
+            verified: false,
+            isTampered: true,
+            blockchainData: null,
+            error: "Failed to verify affidavit",
+          });
+        } finally {
+          setIsVerifying(false);
+        }
+      } else {
+        console.log("Invalid QR code format");
+        setCameraError("Invalid QR code format");
       }
-    }, 2000)
-  }
+    }
+  };
 
   return (
     <div className="container mx-auto px-4 py-12">
@@ -125,16 +231,28 @@ export default function VerifyPage() {
               <CardContent>
                 <div className="h-[300px] overflow-hidden rounded-lg border flex items-center justify-center bg-gray-50">
                   {cameraActive ? (
-                    <div className="flex flex-col items-center">
-                      <Camera className="h-16 w-16 text-gray-400 animate-pulse" />
-                      <p className="mt-4 text-gray-500">Scanning...</p>
-                    </div>
+                    cameraError ? (
+                      <div className="flex flex-col items-center">
+                        <Camera className="h-16 w-16 text-red-400" />
+                        <p className="mt-4 text-red-500">{cameraError}</p>
+                      </div>
+                    ) : (
+                      <video ref={videoRef} style={{ width: "100%", height: "100%" }} />
+                    )
                   ) : (
                     <div className="flex flex-col items-center">
-                      <Button onClick={simulateScan} className="mb-4">
+                      <Button
+                        onClick={() => setCameraActive(true)}
+                        className="mb-4"
+                        disabled={isMediaDevicesSupported === false}
+                      >
                         Activate Camera
                       </Button>
-                      <p className="text-sm text-gray-500">Click to simulate scanning a QR code</p>
+                      <p className="text-sm text-gray-500">
+                        {isMediaDevicesSupported === false
+                          ? "Camera scanning is not supported in this browser"
+                          : "Click to start scanning a QR code"}
+                      </p>
                     </div>
                   )}
                 </div>
@@ -158,7 +276,7 @@ export default function VerifyPage() {
                 <form onSubmit={handleManualVerify} className="space-y-4">
                   <div className="flex gap-2">
                     <Input
-                      placeholder="Enter Affidavit ID"
+                      placeholder="Enter Affidavit ID (e.g., AFF-2025-23456)"
                       value={affidavitId}
                       onChange={(e) => setAffidavitId(e.target.value)}
                       className="flex-1"
@@ -176,37 +294,56 @@ export default function VerifyPage() {
         {verificationResult && (
           <div
             className={`mt-8 p-6 rounded-lg border ${
-              verificationResult.isValid ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200"
+              verificationResult.verified ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200"
             }`}
           >
             <div className="flex items-start gap-4">
               <div
                 className={`p-3 rounded-full ${
-                  verificationResult.isValid ? "bg-green-100 text-green-600" : "bg-red-100 text-red-600"
+                  verificationResult.verified ? "bg-green-100 text-green-600" : "bg-red-100 text-red-600"
                 }`}
               >
                 <FileSearch className="h-6 w-6" />
               </div>
               <div>
                 <h3
-                  className={`text-lg font-semibold ${verificationResult.isValid ? "text-green-800" : "text-red-800"}`}
+                  className={`text-lg font-semibold ${verificationResult.verified ? "text-green-800" : "text-red-800"}`}
                 >
-                  {verificationResult.isValid ? "Verification Successful" : "Verification Failed"}
+                  {verificationResult.verified ? "Verification Successful" : "Verification Failed"}
                 </h3>
-                <p className="text-gray-600 mt-1">{verificationResult.message}</p>
+                <p className="text-gray-600 mt-1">
+                  {verificationResult.error ||
+                    (verificationResult.isTampered
+                      ? "The affidavit data has been tampered with"
+                      : "Document verified successfully on the blockchain")}
+                </p>
 
-                {verificationResult.isValid && verificationResult.details && (
+                {verificationResult.verified && verificationResult.blockchainData && (
                   <div className="mt-4 grid grid-cols-2 gap-4">
-                    {Object.entries(verificationResult.details).map(([key, value]) => (
+                    {[
+                      { key: "affidavitId", label: "Affidavit ID" },
+                      { key: "title", label: "Title" },
+                      { key: "category", label: "Category" },
+                      { key: "issuerName", label: "Issuer Name" },
+                      {
+                        key: "timestamp",
+                        label: "Date Issued",
+                        value: new Date(Number(verificationResult.blockchainData.timestamp) * 1000).toLocaleDateString(),
+                      },
+                    ].map(({ key, label, value }) => (
                       <div key={key} className="bg-white p-3 rounded shadow-sm">
-                        <p className="text-xs text-gray-500 capitalize">{key.replace(/([A-Z])/g, " $1").trim()}</p>
-                        <p className="font-medium">{value as string}</p>
+                        <p className="text-xs text-gray-500">{label}</p>
+                        <p className="font-medium">{value || verificationResult.blockchainData[key]}</p>
                       </div>
                     ))}
                   </div>
                 )}
 
-                {verificationResult.isValid && <Button className="mt-4">View Full Details</Button>}
+                {verificationResult && affidavitId && (
+                  <Link href={`/affidavit/${affidavitId}`}>
+                    <Button className="mt-4">View Full Details</Button>
+                  </Link>
+                )}
               </div>
             </div>
           </div>

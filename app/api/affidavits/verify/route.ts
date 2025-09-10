@@ -60,16 +60,28 @@ export async function POST(request: NextRequest) {
 
     const { id } = await request.json()
 
-    if (!id || !mongoose.Types.ObjectId.isValid(id)) {
-      return NextResponse.json({ success: false, error: "Invalid affidavit ID" }, { status: 400 })
+    if (!id) {
+      return NextResponse.json({ success: false, error: "No affidavit ID provided" }, { status: 400 })
     }
 
-    const affidavit = await Affidavit.findById(id)
-      .populate("issuerId", "_id name idCardNumber walletAddress")
-      .populate("sellerId", "_id name idCardNumber walletAddress")
-      .populate("buyerId", "_id name idCardNumber walletAddress")
-      .populate("createdBy", "_id name idCardNumber walletAddress")
-      .populate("witnesses.contactId", "_id name idCardNumber walletAddress")
+    let affidavit;
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      // If id is a valid MongoDB ObjectId, query by _id
+      affidavit = await Affidavit.findById(id)
+        .populate("issuerId", "_id name idCardNumber walletAddress")
+        .populate("sellerId", "_id name idCardNumber walletAddress")
+        .populate("buyerId", "_id name idCardNumber walletAddress")
+        .populate("createdBy", "_id name idCardNumber walletAddress")
+        .populate("witnesses.contactId", "_id name idCardNumber walletAddress")
+    } else {
+      // Otherwise, assume it's a displayId and query by displayId
+      affidavit = await Affidavit.findOne({ displayId: id })
+        .populate("issuerId", "_id name idCardNumber walletAddress")
+        .populate("sellerId", "_id name idCardNumber walletAddress")
+        .populate("buyerId", "_id name idCardNumber walletAddress")
+        .populate("createdBy", "_id name idCardNumber walletAddress")
+        .populate("witnesses.contactId", "_id name idCardNumber walletAddress")
+    }
 
     if (!affidavit) {
       return NextResponse.json({ success: false, error: "Affidavit not found" }, { status: 404 })
@@ -97,7 +109,7 @@ export async function POST(request: NextRequest) {
         category: bcData[2],
         description: bcData[3],
         declaration: bcData[4],
-        issuerId: bcData[5],
+        issuerName: affidavit.issuerId.name, // Use populated issuerId.name instead of issuerId
         sellerId: bcData[6],
         buyerId: bcData[7],
         ipfsHashes: bcData[8],
@@ -126,7 +138,7 @@ export async function POST(request: NextRequest) {
         category: blockchainData.category,
         description: blockchainData.description,
         declaration: blockchainData.declaration,
-        issuerId: blockchainData.issuerId,
+        issuerName: blockchainData.issuerName, // Use issuerName instead of issuerId
         sellerId: blockchainData.sellerId,
         buyerId: blockchainData.buyerId,
         witnessIds: blockchainData.witnessIds,

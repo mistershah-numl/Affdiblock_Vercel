@@ -1,4 +1,5 @@
 import mongoose, { Schema, type Document, type Model } from "mongoose";
+import "./user"; // Import User model to ensure it is registered first
 
 export interface IAffidavit extends Document {
   displayId: string;
@@ -9,15 +10,15 @@ export interface IAffidavit extends Document {
   issuerId: mongoose.Types.ObjectId;
   issuerName: string;
   issuerIdCardNumber: string;
-  issuerWalletAddress?: string; // Stored in MongoDB, not blockchain
+  issuerWalletAddress?: string;
   sellerId?: mongoose.Types.ObjectId;
   sellerName?: string;
   sellerIdCardNumber?: string;
-  sellerWalletAddress?: string; // Stored in MongoDB, not blockchain
+  sellerWalletAddress?: string;
   buyerId?: mongoose.Types.ObjectId;
   buyerName?: string;
   buyerIdCardNumber?: string;
-  buyerWalletAddress?: string; // Stored in MongoDB, not blockchain
+  buyerWalletAddress?: string;
   witnesses?: Array<{
     contactId: mongoose.Types.ObjectId;
     name: string;
@@ -53,15 +54,15 @@ const affidavitSchema: Schema<IAffidavit> = new Schema(
     issuerId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     issuerName: { type: String, required: true },
     issuerIdCardNumber: { type: String, required: true },
-    issuerWalletAddress: { type: String, required: false }, // Optional, stored in MongoDB
+    issuerWalletAddress: { type: String, required: false },
     sellerId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: false },
     sellerName: { type: String, required: false },
     sellerIdCardNumber: { type: String, required: false },
-    sellerWalletAddress: { type: String, required: false }, // Optional, stored in MongoDB
+    sellerWalletAddress: { type: String, required: false },
     buyerId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: false },
     buyerName: { type: String, required: false },
     buyerIdCardNumber: { type: String, required: false },
-    buyerWalletAddress: { type: String, required: false }, // Optional, stored in MongoDB
+    buyerWalletAddress: { type: String, required: false },
     witnesses: [
       {
         contactId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
