@@ -53,31 +53,38 @@ export function MainNavbar() {
   const isDashboardPath = pathname?.startsWith("/dashboard") || pathname?.startsWith("/admin")
 
   const handleLogin = () => {
+    setIsMenuOpen(false)
     router.push("/login")
   }
 
   const handleRegister = () => {
+    setIsMenuOpen(false)
     router.push("/register")
   }
 
   const handleLogout = () => {
+    setIsMenuOpen(false)
     logout()
     router.push("/")
   }
 
   const handleDashboard = () => {
+    setIsMenuOpen(false)
     router.push("/dashboard")
   }
 
   const handleRequestIssuerRole = () => {
+    setIsMenuOpen(false)
     setIsIssuerDialogOpen(true)
   }
 
   const handleRequestAdminRole = () => {
+    setIsMenuOpen(false)
     router.push("/dashboard/request-admin")
   }
 
   const handleRequestUserRole = () => {
+    setIsMenuOpen(false)
     router.push("/dashboard/request-user")
   }
 
@@ -94,7 +101,10 @@ export function MainNavbar() {
       if (user.roles.includes(role)) {
         menuItems.push({
           label: `Switch to ${role}`,
-          onClick: () => switchRole(role),
+          onClick: () => {
+            switchRole(role)
+            setIsMenuOpen(false)
+          },
         })
       } else {
         if (role === "User") {
@@ -132,7 +142,7 @@ export function MainNavbar() {
         )}
       >
         <div className="container flex h-16 items-center px-4">
-          {isAuthenticated && <SidebarTrigger className="mr-2" />}
+          {isAuthenticated && <SidebarTrigger className="mr-2 md:mr-4" />}
 
           <Link href="/" className="flex items-center gap-2">
             <Shield className="h-6 w-6 text-primary" />
@@ -156,20 +166,7 @@ export function MainNavbar() {
             </nav>
           )}
 
-          {!isDashboardPath && (
-            <div className="md:hidden flex-1 flex justify-end">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setIsMenuOpen(!isMenuOpen)}
-                className="text-gray-500 hover:text-gray-600 dark:text-gray-400 dark:hover:text-gray-300"
-              >
-                {isMenuOpen ? <X className="h-6 w-6" /> : <MenuIcon className="h-6 w-6" />}
-              </Button>
-            </div>
-          )}
-
-          <div className="flex flex-1 items-center justify-end space-x-4">
+          <div className="flex flex-1 items-center justify-end space-x-2 sm:space-x-4">
             <ThemeToggle />
 
             {isAuthenticated && user ? (
@@ -251,34 +248,47 @@ export function MainNavbar() {
                 </DropdownMenu>
               </>
             ) : (
-              <div className="hidden md:flex gap-2">
-                <Button variant="ghost" onClick={handleLogin}>
-                  Login
+              <>
+                <div className="hidden md:flex gap-2">
+                  <Button variant="ghost" onClick={handleLogin}>
+                    Login
+                  </Button>
+                  <Button onClick={handleRegister}>Sign Up</Button>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setIsMenuOpen(!isMenuOpen)}
+                  className="md:hidden text-gray-500 hover:text-gray-600 dark:text-gray-400 dark:hover:text-gray-300"
+                >
+                  {isMenuOpen ? <X className="h-6 w-6" /> : <MenuIcon className="h-6 w-6" />}
                 </Button>
-                <Button onClick={handleRegister}>Sign Up</Button>
-              </div>
+              </>
             )}
           </div>
         </div>
 
-        {!isDashboardPath && isMenuOpen && (
-          <div className="md:hidden border-t py-4 px-6 bg-background">
-            <nav className="flex flex-col space-y-4">
-              {navLinks.map((link) => (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className={cn(
-                    "text-sm font-medium transition-colors hover:text-primary",
-                    pathname === link.href ? "text-primary" : "text-muted-foreground",
-                  )}
-                  onClick={() => setIsMenuOpen(false)}
-                >
-                  {link.name}
-                </Link>
-              ))}
-              {!isAuthenticated && (
-                <div className="pt-4 border-t flex flex-col gap-2">
+        {!isDashboardPath && isMenuOpen && !isAuthenticated && (
+          <div className="md:hidden fixed inset-0 bg-background/95 z-50 flex flex-col pt-16 transition-transform duration-300 ease-in-out">
+            <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4">
+              <nav className="flex flex-col space-y-4">
+                {navLinks.map((link) => (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    className={cn(
+                      "text-base font-medium transition-colors hover:text-primary py-2",
+                      pathname === link.href ? "text-primary font-semibold" : "text-muted-foreground",
+                    )}
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    {link.name}
+                  </Link>
+                ))}
+              </nav>
+
+              <div className="mt-6 border-t pt-4">
+                <div className="flex flex-col gap-2">
                   <Button variant="outline" className="w-full" onClick={handleLogin}>
                     Login
                   </Button>
@@ -286,8 +296,16 @@ export function MainNavbar() {
                     Sign Up
                   </Button>
                 </div>
-              )}
-            </nav>
+              </div>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setIsMenuOpen(false)}
+              className="absolute top-4 right-4 text-gray-500 hover:text-gray-600 dark:text-gray-400 dark:hover:text-gray-300"
+            >
+              <X className="h-6 w-6" />
+            </Button>
           </div>
         )}
       </header>
@@ -297,4 +315,4 @@ export function MainNavbar() {
 }
 
 
-///earlier 296
+///earlier 297

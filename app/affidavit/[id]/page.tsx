@@ -129,7 +129,7 @@ export default function AffidavitDetailPage() {
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      setQrValue(`${window.location.origin}/verify/${displayId}`)
+      setQrValue(`${window.location.origin}/affidavit/${displayId}`)
     }
     fetchAffidavit()
   }, [displayId])
@@ -145,7 +145,7 @@ export default function AffidavitDetailPage() {
 
       if (data.success) {
         setAffidavit(data.affidavit)
-        await verifyOnBlockchain(data.affidavit)
+        await verifyOnBlockchain()
       } else {
         throw new Error(data.error || "Failed to fetch affidavit")
       }
@@ -161,22 +161,30 @@ export default function AffidavitDetailPage() {
     }
   }
 
-  const verifyOnBlockchain = async (affidavitData: Affidavit) => {
+  const verifyOnBlockchain = async () => {
     try {
       setIsVerifying(true)
+      // Fetch fresh affidavit data
+      const response = await fetch(`/api/affidavits/get?id=${displayId}`)
+      if (!response.ok) {
+        throw new Error(`Failed to fetch affidavit: ${response.statusText}`)
+      }
+      const data = await response.json()
+      if (!data.success || !data.affidavit) {
+        throw new Error(data.error || "Failed to fetch affidavit")
+      }
+      const affidavitData = data.affidavit
+      setAffidavit(affidavitData)
+
       if (!affidavitData?._id) {
         throw new Error("Affidavit ID not available. Please reload the page.")
       }
 
       const affidavitDataForHash = createAffidavitDataForHash(affidavitData)
-
       const freshDataHash = generateAffidavitHash(affidavitDataForHash)
-      console.log("[v0] Verification Input Data:", JSON.stringify(affidavitDataForHash, null, 2))
-      console.log("[v0] Fresh Data Hash:", freshDataHash)
-      console.log("[v0] Stored MongoDB Data Hash:", affidavitData.dataHash)
 
       let blockchainData = null
-      let originalData = null
+      let userMap: Record<string, { name: string; idCardNumber: string }> = {}
       try {
         const provider = new ethers.JsonRpcProvider(process.env.NEXT_PUBLIC_GANACHE_RPC_URL || "http://127.0.0.1:7545")
         const contractAddress = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || "0xED7864989c1f88481C5Ac0242F263DC4CE2D427d"
@@ -199,7 +207,6 @@ export default function AffidavitDetailPage() {
           onBlockchain: bcData[11],
           witnessIds: witnessIds || [],
         }
-        console.log("Blockchain Data:", blockchainData)
       } catch (error) {
         console.error("Error fetching blockchain data:", error)
         throw new Error("Failed to fetch blockchain data")
@@ -214,18 +221,58 @@ export default function AffidavitDetailPage() {
       setIsTampered(isTampered)
       setBlockchainData(blockchainData)
 
+      let originalData = null
       if (isTampered) {
+        // Collect unique user IDs for lookup
+        const userIds = [
+          blockchainData.issuerId,
+          blockchainData.sellerId,
+          blockchainData.buyerId,
+          ...(blockchainData.witnessIds || []),
+        ].filter(id => id && id !== "0" && id !== "")
+
+        try {
+          const idCardResponse = await fetch("/api/public/user-idcard", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userIds }),
+          })
+          if (idCardResponse.ok) {
+            const idCardData = await idCardResponse.json()
+            if (idCardData.success) {
+              userMap = idCardData.data
+            }
+          }
+        } catch (error) {
+          // No console logs for security
+        }
+
         originalData = {
           affidavitId: blockchainData.affidavitId,
           title: blockchainData.title,
           category: blockchainData.category,
           description: blockchainData.description,
           declaration: blockchainData.declaration,
-          issuerId: blockchainData.issuerId,
-          sellerId: blockchainData.sellerId,
-          buyerId: blockchainData.buyerId,
-          ipfsHashes: blockchainData.ipfsHashes,
-          witnessIds: blockchainData.witnessIds,
+          issuer: {
+            name: userMap[blockchainData.issuerId]?.name || "Unknown",
+            idCardNumber: userMap[blockchainData.issuerId]?.idCardNumber || blockchainData.issuerId || "N/A",
+          },
+          seller: blockchainData.sellerId
+            ? {
+                name: userMap[blockchainData.sellerId]?.name || "Unknown",
+                idCardNumber: userMap[blockchainData.sellerId]?.idCardNumber || blockchainData.sellerId || "N/A",
+              }
+            : null,
+          buyer: blockchainData.buyerId
+            ? {
+                name: userMap[blockchainData.buyerId]?.name || "Unknown",
+                idCardNumber: userMap[blockchainData.buyerId]?.idCardNumber || blockchainData.buyerId || "N/A",
+              }
+            : null,
+          witnesses: blockchainData.witnessIds?.map((id: string) => ({
+            name: userMap[id]?.name || "Unknown",
+            idCardNumber: userMap[id]?.idCardNumber || id || "N/A",
+          })) || [],
           dataHash: blockchainData.dataHash,
           timestamp: blockchainData.timestamp,
         }
@@ -372,14 +419,10 @@ export default function AffidavitDetailPage() {
     pdf.setFont("helvetica", "normal")
     pdf.text(affidavit.issuerName || "N/A", 15, 257)
 
-    pdf.setFont("helvetica", "bold")
-    pdf.text("Official Seal:", 150, 250)
-    pdf.rect(150, 252, 40, 20)
-
     pdf.setFontSize(10)
     pdf.setTextColor(120, 120, 120)
     pdf.text("AffidBlock - Blockchain-Based Verification Platform", 105, 280, { align: "center" })
-    pdf.text(`Verify this document at ${window.location.origin}/verify/${displayId}`, 105, 285, { align: "center" })
+    pdf.text(`Verify this document at ${window.location.origin}/affidavit/${displayId}`, 105, 285, { align: "center" })
 
     pdf.save(`Affidavit_${displayId}.pdf`)
   }
@@ -436,88 +479,9 @@ export default function AffidavitDetailPage() {
     }
   }
 
-  if (isLoading) {
-    return (
-      <div className="container mx-auto px-4 py-8 flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto"></div>
-          <p className="mt-4 text-lg">Loading affidavit...</p>
-        </div>
-      </div>
-    )
-  }
-
-  if (!affidavit) {
-    return (
-      <div className="container mx-auto px-4 py-8 flex items-center justify-center min-h-screen">
-        <Card className="w-full max-w-md">
-          <CardContent className="p-6">
-            <h2 className="text-xl font-bold text-center mb-4">Affidavit Not Found</h2>
-            <p className="text-gray-500 text-center mb-6">
-              The requested affidavit could not be found or you don't have permission to view it.
-            </p>
-            <div className="flex justify-center">
-              <Button onClick={() => router.push("/dashboard/affidavits")}>Back to Affidavits</Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    )
-  }
-
-  const getDocumentThumbnail = (doc: any) => {
-    const fileType = doc.type.toLowerCase()
-    if (fileType.includes("image")) {
-      return (
-        <div className="relative w-24 h-24 bg-gray-200 rounded-lg overflow-hidden cursor-pointer hover:opacity-80 transition-opacity">
-          <img
-            src={doc.url || "/placeholder.svg"}
-            alt={doc.name}
-            className="w-full h-full object-cover"
-            onClick={() => setSelectedDocument(doc)}
-          />
-          <div className="absolute inset-0 bg-black bg-opacity-0 hover:bg-opacity-20 transition-all flex items-center justify-center">
-            <Eye className="text-white opacity-0 hover:opacity-100 transition-opacity" size={20} />
-          </div>
-        </div>
-      )
-    } else if (fileType.includes("pdf")) {
-      return (
-        <div
-          className="w-24 h-24 bg-red-100 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:bg-red-200 transition-colors"
-          onClick={() => window.open(doc.url, "_blank")}
-        >
-          <FileText className="text-red-600" size={32} />
-          <span className="text-xs text-red-600 mt-1">PDF</span>
-        </div>
-      )
-    } else if (fileType.includes("video")) {
-      return (
-        <div
-          className="w-24 h-24 bg-blue-100 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:bg-blue-200 transition-colors"
-          onClick={() => setSelectedDocument(doc)}
-        >
-          <Video className="text-blue-600" size={32} />
-          <span className="text-xs text-blue-600 mt-1">VIDEO</span>
-        </div>
-      )
-    } else {
-      return (
-        <div
-          className="w-24 h-24 bg-gray-100 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:bg-gray-200 transition-colors"
-          onClick={() => window.open(doc.url, "_blank")}
-        >
-          <ImageIcon className="text-gray-600" size={32} />
-          <span className="text-xs text-gray-600 mt-1">FILE</span>
-        </div>
-      )
-    }
-  }
-
   const generateOriginalAffidavitPDF = async () => {
     if (!originalData) return
 
-    // Get QR code image from the existing canvas
     const qrCanvas = qrRef.current
     if (!qrCanvas) return
     const qrImage = qrCanvas.toDataURL("image/png")
@@ -525,36 +489,31 @@ export default function AffidavitDetailPage() {
     const { jsPDF } = await import("jspdf")
     const doc = new jsPDF()
 
-    // Add watermark
     doc.setFontSize(60)
     doc.setTextColor(200, 200, 200)
     doc.text("ORIGINAL BLOCKCHAIN DATA", 105, 150, { align: "center", angle: 45 })
 
-    // Header
     doc.setFontSize(16)
     doc.setTextColor(0, 0, 0)
     doc.setFont("helvetica", "bold")
-    doc.text("GOVERNMENT OF [STATE/COUNTRY]", 105, 20, { align: "center" })
+    doc.text("GOVERNMENT OF PAKISTAN", 105, 20, { align: "center" })
     doc.text("DEPARTMENT OF LEGAL AFFAIRS", 105, 30, { align: "center" })
     doc.setFontSize(14)
     doc.text("ORIGINAL AFFIDAVIT (BLOCKCHAIN VERIFIED)", 105, 40, { align: "center" })
 
-    // Warning box
     doc.setFillColor(255, 235, 235)
     doc.rect(10, 50, 190, 15, "F")
     doc.setFontSize(10)
     doc.setTextColor(200, 0, 0)
     doc.text("⚠️ WARNING: This document shows ORIGINAL blockchain data. Current data may be tampered.", 15, 60)
 
-    // QR Code - using the same approach as frontend
-    doc.addImage(qrImage, "PNG", 160, 70, 30, 30)
+    doc.addImage(qrImage, "PNG", 160, 70, 40, 40)
     doc.setFontSize(8)
     doc.setTextColor(0, 0, 0)
-    doc.text("Scan to verify", 175, 105, { align: "center" })
+    doc.text("Scan to verify", 175, 115, { align: "center" })
 
-    let yPos = 110
+    let yPos = 120
 
-    // Affidavit Details
     doc.setFontSize(12)
     doc.setFont("helvetica", "bold")
     doc.text("AFFIDAVIT DETAILS", 15, yPos)
@@ -562,7 +521,7 @@ export default function AffidavitDetailPage() {
 
     doc.setFont("helvetica", "normal")
     doc.setFontSize(10)
-    doc.text(`Affidavit ID: ${originalData.displayId || "N/A"}`, 15, yPos)
+    doc.text(`Affidavit ID: ${originalData.affidavitId || "N/A"}`, 15, yPos)
     yPos += 8
     doc.text(`Title: ${originalData.title || "N/A"}`, 15, yPos)
     yPos += 8
@@ -571,7 +530,6 @@ export default function AffidavitDetailPage() {
     doc.text(`Description: ${originalData.description || "N/A"}`, 15, yPos)
     yPos += 15
 
-    // Declaration
     doc.setFont("helvetica", "bold")
     doc.text("DECLARATION", 15, yPos)
     yPos += 8
@@ -580,38 +538,32 @@ export default function AffidavitDetailPage() {
     doc.text(declarationLines, 15, yPos)
     yPos += declarationLines.length * 5 + 10
 
-    // Parties
     doc.setFont("helvetica", "bold")
     doc.text("PARTIES INVOLVED", 15, yPos)
     yPos += 10
 
-    if (originalData.buyerId) {
+    doc.setFont("helvetica", "normal")
+    doc.text(`Issuer: ${originalData.issuer.name} (ID: ${originalData.issuer.idCardNumber})`, 15, yPos)
+    yPos += 8
+    if (originalData.seller) {
+      doc.text(`Seller: ${originalData.seller.name} (ID: ${originalData.seller.idCardNumber})`, 15, yPos)
+      yPos += 8
+    }
+    if (originalData.buyer) {
+      doc.text(`Buyer: ${originalData.buyer.name} (ID: ${originalData.buyer.idCardNumber})`, 15, yPos)
+      yPos += 8
+    }
+    if (originalData.witnesses && originalData.witnesses.length > 0) {
+      doc.setFont("helvetica", "bold")
+      doc.text("WITNESSES", 15, yPos)
+      yPos += 10
       doc.setFont("helvetica", "normal")
-      doc.text(
-        `Buyer: ${originalData.buyerId.name || "N/A"} (ID: ${originalData.buyerId.idCardNumber || "N/A"})`,
-        15,
-        yPos,
-      )
-      yPos += 8
-    }
-    if (originalData.sellerId) {
-      doc.text(
-        `Seller: ${originalData.sellerId.name || "N/A"} (ID: ${originalData.sellerId.idCardNumber || "N/A"})`,
-        15,
-        yPos,
-      )
-      yPos += 8
-    }
-    if (originalData.issuerId) {
-      doc.text(
-        `Issuer: ${originalData.issuerId.name || "N/A"} (ID: ${originalData.issuerId.idCardNumber || "N/A"})`,
-        15,
-        yPos,
-      )
-      yPos += 15
+      originalData.witnesses.forEach((witness: { name: string; idCardNumber: string }, index: number) => {
+        doc.text(`${index + 1}. ${witness.name} (ID: ${witness.idCardNumber})`, 15, yPos)
+        yPos += 8
+      })
     }
 
-    // Signature section
     doc.setFont("helvetica", "bold")
     doc.text("VERIFICATION", 15, yPos)
     yPos += 10
@@ -622,14 +574,16 @@ export default function AffidavitDetailPage() {
     yPos += 8
     doc.text("Date: " + new Date().toLocaleDateString(), 15, yPos)
 
-    // Footer
     doc.setFontSize(8)
     doc.setTextColor(100, 100, 100)
     doc.text("This document contains original blockchain data and serves as proof of authenticity.", 105, 280, {
       align: "center",
     })
+    doc.text(`Verify this document at ${window.location.origin}/affidavit/${originalData.affidavitId}`, 105, 285, {
+      align: "center",
+    })
 
-    doc.save(`Original_Affidavit_${originalData.displayId || "Unknown"}.pdf`)
+    doc.save(`Original_Affidavit_${originalData.affidavitId || "Unknown"}.pdf`)
   }
 
   const getNetworkName = () => {
@@ -691,9 +645,87 @@ export default function AffidavitDetailPage() {
     }
   }
 
+  const getDocumentThumbnail = (doc: any) => {
+    const fileType = doc.type.toLowerCase()
+    if (fileType.includes("image")) {
+      return (
+        <div className="relative w-24 h-24 bg-gray-200 rounded-lg overflow-hidden cursor-pointer hover:opacity-80 transition-opacity mx-auto">
+          <img
+            src={doc.url || "/placeholder.svg"}
+            alt={doc.name}
+            className="w-full h-full object-cover"
+            onClick={() => setSelectedDocument(doc)}
+          />
+          <div className="absolute inset-0 bg-black bg-opacity-0 hover:bg-opacity-20 transition-all flex items-center justify-center">
+            <Eye className="text-white opacity-0 hover:opacity-100 transition-opacity" size={20} />
+          </div>
+        </div>
+      )
+    } else if (fileType.includes("pdf")) {
+      return (
+        <div
+          className="w-24 h-24 bg-red-100 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:bg-red-200 transition-colors mx-auto"
+          onClick={() => window.open(doc.url, "_blank")}
+        >
+          <FileText className="text-red-600" size={32} />
+          <span className="text-xs text-red-600 mt-1">PDF</span>
+        </div>
+      )
+    } else if (fileType.includes("video")) {
+      return (
+        <div
+          className="w-24 h-24 bg-blue-100 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:bg-blue-200 transition-colors mx-auto"
+          onClick={() => setSelectedDocument(doc)}
+        >
+          <Video className="text-blue-600" size={32} />
+          <span className="text-xs text-blue-600 mt-1">VIDEO</span>
+        </div>
+      )
+    } else {
+      return (
+        <div
+          className="w-24 h-24 bg-gray-100 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:bg-gray-200 transition-colors mx-auto"
+          onClick={() => window.open(doc.url, "_blank")}
+        >
+          <ImageIcon className="text-gray-600" size={32} />
+          <span className="text-xs text-gray-600 mt-1">FILE</span>
+        </div>
+      )
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="container mx-auto px-4 py-8 flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto"></div>
+          <p className="mt-4 text-lg">Loading affidavit...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!affidavit) {
+    return (
+      <div className="container mx-auto px-4 py-8 flex items-center justify-center min-h-screen">
+        <Card className="w-full max-w-md">
+          <CardContent className="p-6">
+            <h2 className="text-xl font-bold text-center mb-4">Affidavit Not Found</h2>
+            <p className="text-gray-500 text-center mb-6">
+              The requested affidavit could not be found or you don't have permission to view it.
+            </p>
+            <div className="flex justify-center">
+              <Button onClick={() => router.push("/dashboard/affidavits")}>Back to Affidavits</Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="flex flex-col xl:flex-row items-center xl:items-start gap-8">
+    <div className="container mx-auto px-2 sm:px-4 py-4 sm:py-8">
+      <div className="flex flex-col xl:flex-row items-center xl:items-start gap-4 sm:gap-8">
         <div className="w-full xl:w-2/3">
           <button
             onClick={() => router.back()}
@@ -704,18 +736,18 @@ export default function AffidavitDetailPage() {
           </button>
 
           <Card className="shadow-lg">
-            <CardContent className="p-4 md:p-6">
+            <CardContent className="p-2 sm:p-4 md:p-6">
               <div className="text-center">
-                <h2 className="text-lg font-semibold text-gray-700">GOVERNMENT OF PAKISTAN</h2>
-                <h1 className="text-xl md:text-2xl font-bold text-gray-900 mt-1">{affidavit.title}</h1>
-                <p className="text-sm text-gray-500 mt-1">Issued under legal compliance</p>
+                <h2 className="text-base sm:text-lg font-semibold text-gray-700">GOVERNMENT OF PAKISTAN</h2>
+                <h1 className="text-lg sm:text-xl md:text-2xl font-bold text-gray-900 mt-1">{affidavit.title}</h1>
+                <p className="text-xs sm:text-sm text-gray-500 mt-1">Issued under legal compliance</p>
                 <div className="border-t border-gray-300 my-4"></div>
               </div>
 
               {getVerificationStatus()}
 
               <Tabs defaultValue="details" className="mt-6">
-                <TabsList className="grid w-full grid-cols-4 text-xs md:text-sm">
+                <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-4 text-xs md:text-sm">
                   <TabsTrigger value="details">Details</TabsTrigger>
                   <TabsTrigger value="parties">Parties</TabsTrigger>
                   <TabsTrigger value="documents">Documents</TabsTrigger>
@@ -765,25 +797,21 @@ export default function AffidavitDetailPage() {
                       .map((item, index) => (
                         <div key={index} className="bg-gray-100 p-4 rounded-lg shadow-sm">
                           <p className="text-sm text-gray-500">{item.label}</p>
-                          <h2 className="text-lg font-semibold break-words">{item.value}</h2>
+                          <h2 className="text-lg font-semibold break-all">{item.value}</h2>
                         </div>
                       ))}
                   </div>
 
                   <h2 className="text-lg font-semibold text-gray-700 underline mt-6">Declaration</h2>
-                  <p className="text-gray-700 text-justify mt-2">{affidavit.declaration}</p>
+                  <p className="text-gray-700 text-justify mt-2 break-words">{affidavit.declaration}</p>
 
                   <h2 className="text-lg font-semibold text-gray-700 underline mt-6">Statement of Truth</h2>
-                  <p className="text-gray-700 text-justify mt-2">{affidavit.description}</p>
+                  <p className="text-gray-700 text-justify mt-2 break-words">{affidavit.description}</p>
 
                   <div className="mt-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                     <div>
                       <p className="text-sm text-gray-500">Authorized Signature</p>
                       <h2 className="text-lg font-semibold">{affidavit.issuerName || "N/A"}</h2>
-                    </div>
-                    <div className="text-left md:text-right">
-                      <p className="text-sm text-gray-500">Official Seal</p>
-                      <div className="w-20 h-10 border border-gray-400 rounded-lg mt-2"></div>
                     </div>
                   </div>
                 </TabsContent>
@@ -861,28 +889,16 @@ export default function AffidavitDetailPage() {
                   <div className="space-y-6">
                     <h2 className="text-lg font-semibold text-gray-700 mb-3">Attached Documents</h2>
                     {affidavit.documents && affidavit.documents.length > 0 ? (
-                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
                         {affidavit.documents.map((doc: any, index: number) => (
-                          <div key={index} className="space-y-2">
+                          <div key={index} className="space-y-2 text-center">
                             {getDocumentThumbnail(doc)}
-                            <div className="text-center">
+                            <div>
                               <h3 className="font-medium text-sm truncate" title={doc.name}>
                                 {doc.name}
                               </h3>
                               <p className="text-xs text-gray-500">{doc.type}</p>
-                              <div className="flex gap-1 mt-2">
-                                {doc.ipfsHash && (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="text-xs px-2 py-1 h-auto bg-transparent"
-                                    onClick={() =>
-                                      window.open(`https://gateway.pinata.cloud/ipfs/${doc.ipfsHash}`, "_blank")
-                                    }
-                                  >
-                                    View
-                                  </Button>
-                                )}
+                              <div className="flex justify-center gap-1 mt-2">
                                 <Button
                                   size="sm"
                                   variant="outline"
@@ -945,7 +961,7 @@ export default function AffidavitDetailPage() {
                     </div>
 
                     <Button
-                      onClick={() => verifyOnBlockchain(affidavit)}
+                      onClick={verifyOnBlockchain}
                       variant="outline"
                       disabled={isVerifying}
                       className="w-full"
@@ -961,10 +977,10 @@ export default function AffidavitDetailPage() {
 
         <div className="w-full xl:w-1/3 flex flex-col items-center">
           <Card className="w-full shadow-lg">
-            <CardContent className="p-4 md:p-6 flex flex-col items-center">
+            <CardContent className="p-2 sm:p-4 md:p-6 flex flex-col items-center">
               <h2 className="text-xl font-semibold text-gray-800 mb-4">Verify & Download</h2>
 
-              <div className="bg-white p-4 border rounded-lg shadow-sm mb-6">
+              <div className="bg-white p-4 border rounded-lg shadow-sm mb-6 w-full sm:w-auto">
                 <QRCodeCanvas value={qrValue} size={200} className="mx-auto" ref={qrRef} />
                 <p className="text-center text-sm text-gray-500 mt-2">Scan to verify this affidavit</p>
               </div>
@@ -985,7 +1001,7 @@ export default function AffidavitDetailPage() {
                 </Button>
 
                 <Button
-                  onClick={() => verifyOnBlockchain(affidavit)}
+                  onClick={verifyOnBlockchain}
                   variant="outline"
                   className="w-full"
                   disabled={isVerifying}
@@ -998,7 +1014,7 @@ export default function AffidavitDetailPage() {
                 <h3 className="font-semibold text-gray-800 mb-2">Verification Instructions</h3>
                 <ol className="text-sm text-gray-600 space-y-2 list-decimal list-inside">
                   <li>Scan the QR code with any QR scanner</li>
-                  <li>You will be redirected to the verification page</li>
+                  <li>You will be redirected to the affidavit page</li>
                   <li>The system will automatically check the blockchain</li>
                   <li>Verification results will be displayed instantly</li>
                 </ol>
@@ -1060,12 +1076,10 @@ export default function AffidavitDetailPage() {
                 </p>
               </div>
 
-              {/* PDF-like document layout */}
               <div
                 className="bg-white border-2 border-black mx-auto max-w-4xl relative"
                 style={{ aspectRatio: "210/297" }}
               >
-                {/* Watermark */}
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                   <div
                     className="text-gray-300 text-8xl font-bold transform rotate-45 opacity-10 select-none"
@@ -1076,21 +1090,19 @@ export default function AffidavitDetailPage() {
                 </div>
 
                 <div className="p-8 relative z-10 h-full flex flex-col">
-                  {/* Header */}
                   <div className="text-center mb-6">
                     <h1 className="text-xl font-bold mb-2">Government of Pakistan</h1>
                     <h2 className="text-lg font-semibold mb-4">{originalData.title?.toUpperCase() || "N/A"}</h2>
 
-                    <div className="absolute top-4 right-4 w-16 h-16 bg-white border border-gray-300 flex items-center justify-center">
+                    <div className="absolute top-4 right-4 w-20 h-20 bg-white border border-gray-300 flex items-center justify-center">
                       <QRCodeCanvas
-                        value={`${typeof window !== "undefined" ? window.location.origin : ""}/verify/${originalData.affidavitId}`}
-                        size={60}
+                        value={`${typeof window !== "undefined" ? window.location.origin : ""}/affidavit/${originalData.affidavitId}`}
+                        size={80}
                         className="w-full h-full"
                       />
                     </div>
                   </div>
 
-                  {/* Details Section */}
                   <div className="mb-6 text-sm space-y-1">
                     {[
                       { label: "Affidavit ID", value: originalData.affidavitId || "N/A" },
@@ -1108,62 +1120,61 @@ export default function AffidavitDetailPage() {
                     ].map((item, index) => (
                       <div key={index} className="flex">
                         <span className="font-semibold w-32">{item.label}:</span>
-                        <span>{item.value}</span>
+                        <span className="break-all">{item.value}</span>
                       </div>
                     ))}
                   </div>
 
-                  {/* Parties Section */}
                   <div className="mb-6">
                     <h3 className="text-sm font-bold mb-2 underline">PARTIES</h3>
                     <div className="text-sm space-y-1">
                       <div>
-                        Issuer: {originalData.issuerName || "N/A"} (ID: {originalData.issuerId || "N/A"})
+                        Issuer: {originalData.issuer.name} (ID: {originalData.issuer.idCardNumber})
                       </div>
-                      {originalData.sellerId && (
+                      {originalData.seller && (
                         <div>
-                          Seller: {originalData.sellerName || "N/A"} (ID: {originalData.sellerId})
+                          Seller: {originalData.seller.name} (ID: {originalData.seller.idCardNumber})
                         </div>
                       )}
-                      {originalData.buyerId && (
+                      {originalData.buyer && (
                         <div>
-                          Buyer: {originalData.buyerName || "N/A"} (ID: {originalData.buyerId})
+                          Buyer: {originalData.buyer.name} (ID: {originalData.buyer.idCardNumber})
+                        </div>
+                      )}
+                      {originalData.witnesses && originalData.witnesses.length > 0 && (
+                        <div>
+                          <h3 className="text-sm font-bold mt-4 mb-2 underline">WITNESSES</h3>
+                          {originalData.witnesses.map((witness: { name: string; idCardNumber: string }, index: number) => (
+                            <div key={index}>{`${index + 1}. ${witness.name} (ID: ${witness.idCardNumber})`}</div>
+                          ))}
                         </div>
                       )}
                     </div>
                   </div>
 
-                  {/* Declaration Section */}
                   <div className="mb-6">
                     <h3 className="text-sm font-bold mb-2 underline">DECLARATION</h3>
-                    <p className="text-sm text-justify leading-relaxed">{originalData.declaration || "N/A"}</p>
+                    <p className="text-sm text-justify leading-relaxed break-words">{originalData.declaration || "N/A"}</p>
                   </div>
 
-                  {/* Statement of Truth Section */}
                   <div className="mb-8">
                     <h3 className="text-sm font-bold mb-2 underline">STATEMENT OF TRUTH</h3>
-                    <p className="text-sm text-justify leading-relaxed">{originalData.description || "N/A"}</p>
+                    <p className="text-sm text-justify leading-relaxed break-words">{originalData.description || "N/A"}</p>
                   </div>
 
-                  {/* Signature Section */}
                   <div className="mt-auto">
                     <div className="flex justify-between items-end">
                       <div>
                         <div className="text-sm font-bold mb-2">Authorized Signature:</div>
-                        <div className="text-sm">{originalData.issuerName || "N/A"}</div>
-                      </div>
-                      <div>
-                        <div className="text-sm font-bold mb-2">Official Seal:</div>
-                        <div className="w-20 h-12 border border-gray-400"></div>
+                        <div className="text-sm">{originalData.issuer.name}</div>
                       </div>
                     </div>
                   </div>
 
-                  {/* Footer */}
                   <div className="text-center text-xs text-gray-500 mt-4 pt-4 border-t">
                     <div>AffidBlock - Blockchain-Based Verification Platform</div>
                     <div>
-                      Verify this document at {typeof window !== "undefined" ? window.location.origin : ""}/verify/
+                      Verify this document at {typeof window !== "undefined" ? window.location.origin : ""}/affidavit/
                       {originalData.affidavitId}
                     </div>
                   </div>
@@ -1186,3 +1197,7 @@ export default function AffidavitDetailPage() {
     </div>
   )
 }
+
+
+
+//earlier 1211 
