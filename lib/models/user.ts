@@ -23,6 +23,12 @@ interface IUser extends Document {
   status: string;
   roles: string[];
   activeRole: string;
+  remarks?: string;
+  licenseUrl?: string;
+  organization?: string;
+  city?: string;
+  designation?: string;
+  dateOfJoining?: Date;
   createdAt: Date;
   updatedAt: Date;
   comparePassword: (candidatePassword: string) => Promise<boolean>;
@@ -31,7 +37,7 @@ interface IUser extends Document {
 const userSchema: Schema<IUser> = new Schema(
   {
     name: { type: String, required: true },
-    email: { type: String, required: true, unique: true },
+    email: { type: String, required: true, unique: true, index: true },
     password: { type: String, required: true },
     phone: { type: String },
     idCardNumber: { type: String },
@@ -49,6 +55,12 @@ const userSchema: Schema<IUser> = new Schema(
     status: { type: String, default: "Active" },
     roles: { type: [String], default: ["User"] },
     activeRole: { type: String, default: "User" },
+    remarks: { type: String },
+    licenseUrl: { type: String },
+    organization: { type: String },
+    city: { type: String },
+    designation: { type: String },
+    dateOfJoining: { type: Date },
   },
   { timestamps: true }
 );
@@ -70,6 +82,18 @@ userSchema.pre("save", function (next) {
   if (!this.activeRole) {
     this.activeRole = "User";
   }
+  // Clear remarks if user is not banned
+  if (this.status !== "Banned") {
+    this.remarks = undefined;
+  }
+  // Clear issuer-specific fields if user does not have Issuer role
+  if (!this.roles.includes("Issuer")) {
+    this.licenseUrl = undefined;
+    this.organization = undefined;
+    this.city = undefined;
+    this.designation = undefined;
+    this.dateOfJoining = undefined;
+  }
   next();
 });
 
@@ -81,3 +105,5 @@ userSchema.methods.comparePassword = async function (candidatePassword: string):
 const User: Model<IUser> = mongoose.models.User || mongoose.model<IUser>("User", userSchema);
 
 export default User;
+
+//earlier 89 lines

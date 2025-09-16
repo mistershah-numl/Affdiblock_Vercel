@@ -7,7 +7,7 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import dynamicImport from "next/dynamic"
-import { Users, FileText, Clock, Search, Filter, FilePlus, CheckCircle, XCircle, AlertCircle, Flag, Edit, Eye, MoreVertical } from "lucide-react"
+import { Users, FileText, Clock, Search, Filter, FilePlus, CheckCircle, XCircle, AlertCircle, Eye } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -20,12 +20,6 @@ import { Label } from "@/components/ui/label"
 import { useAuth } from "@/lib/auth-context"
 import { ProtectedRoute } from "@/components/protected-route"
 import { toast } from "@/components/ui/use-toast"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 
 // Dynamically import CreateAffidavitDialog for client-side rendering
 const CreateAffidavitDialog = dynamicImport(() => import("@/components/create-affidavit-dialog"), {
@@ -35,11 +29,13 @@ const CreateAffidavitDialog = dynamicImport(() => import("@/components/create-af
 
 // Define interfaces for TypeScript
 interface Affidavit {
-  id: string
+  _id: string
+  displayId: string
   title: string
   category: string
+  issuerId: { _id: string; name: string; area: string; idCardNumber: string } | string
+  issuerName: string
   dateIssued: string
-  parties: string
   status: string
 }
 
@@ -53,6 +49,31 @@ interface User {
   status: string
   idCardNumber?: string
   formattedIdCardNumber?: string
+}
+
+interface IssuerRequest {
+  _id: string
+  userId: { _id: string; name: string; email: string; idCardNumber: string }
+  organization: string
+  city: string
+  designation: string
+  dateOfJoining: string
+  status: string
+  remarks?: string
+  createdAt: string
+}
+
+interface AffidavitRequest {
+  _id: string
+  displayId: string
+  title: string
+  category: string
+  issuerId: { _id: string; name: string; area: string; idCardNumber: string }
+  createdAt: string
+  status: string
+  sellerId?: { name: string }
+  buyerId?: { name: string }
+  witnesses: { contactId: { name: string } }[]
 }
 
 export default function DashboardPage() {
@@ -107,11 +128,11 @@ export default function DashboardPage() {
   switch (user.activeRole) {
     case "Admin":
       // Ensure token is a string before passing it
-      return token ? <AdminDashboard token={token} /> : null
+      return token ? <AdminDashboard token={token} userId={user._id} /> : null
     case "Issuer":
-      return <IssuerDashboard />
+      return token ? <IssuerDashboard token={token} userId={user._id} /> : null
     case "User":
-      return <UserDashboard />
+      return token ? <UserDashboard token={token} userId={user._id} /> : null
     default:
       return (
         <div className="flex flex-col gap-6 p-6">
@@ -121,18 +142,24 @@ export default function DashboardPage() {
   }
 }
 
-// Admin Dashboard Component (Updated)
-function AdminDashboard({ token }: { token: string }) {
+// Admin Dashboard Component
+function AdminDashboard({ token, userId }: { token: string; userId: string }) {
   const router = useRouter()
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [users, setUsers] = useState<User[]>([])
+  const [affidavits, setAffidavits] = useState<Affidavit[]>([])
+  const [issuerRequests, setIssuerRequests] = useState<IssuerRequest[]>([])
   const [isUsersLoading, setIsUsersLoading] = useState(true)
+  const [isAffidavitsLoading, setIsAffidavitsLoading] = useState(true)
+  const [isIssuerRequestsLoading, setIsIssuerRequestsLoading] = useState(true)
 
-  // Fetch users when the component mounts
+  // Fetch users, affidavits, and issuer requests
   useEffect(() => {
     fetchUsers()
-  }, [])
+    fetchAffidavits()
+    fetchIssuerRequests()
+  }, [token])
 
   const fetchUsers = async () => {
     setIsUsersLoading(true)
@@ -173,128 +200,145 @@ function AdminDashboard({ token }: { token: string }) {
     }
   }
 
-  // Calculate total issuers by filtering users with the "Issuer" role
+  const fetchAffidavits = async () => {
+    setIsAffidavitsLoading(true)
+    try {
+      const response = await fetch("/api/affidavits/get-all-admin", {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await response.json()
+      if (data.success) {
+        // Map affidavits to match the expected interface
+        const mappedAffidavits = data.affidavits.map((aff: any) => ({
+          _id: aff._id,
+          displayId: aff.displayId,
+          title: aff.title,
+          category: aff.category,
+          issuerId: aff.issuerId,
+          issuerName: aff.issuerId?.name || "Unknown",
+          dateIssued: aff.dateIssued || aff.createdAt,
+          status: aff.status || "Active",
+        }))
+        setAffidavits(mappedAffidavits)
+      } else {
+        toast({
+          title: "Error",
+          description: data.error || "Failed to fetch affidavits",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error("Error fetching affidavits:", error)
+      toast({
+        title: "Error",
+        description: "An unexpected error occurred while fetching affidavits",
+        variant: "destructive",
+      })
+    } finally {
+      setIsAffidavitsLoading(false)
+    }
+  }
+
+  const fetchIssuerRequests = async () => {
+    setIsIssuerRequestsLoading(true)
+    try {
+      const response = await fetch("/api/issuer-requests", {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await response.json()
+      if (data.success) {
+        // Map issuer requests to match the expected interface
+        const mappedRequests = data.data.map((req: any) => ({
+          _id: req._id,
+          userId: {
+            _id: req.user._id,
+            name: req.user.name || "Unknown",
+            email: req.user.email || "Unknown",
+            idCardNumber: req.user.idCardNumber || "N/A",
+          },
+          organization: req.organization,
+          city: req.city,
+          designation: req.designation,
+          dateOfJoining: req.dateOfJoining,
+          status: req.status,
+          remarks: req.remarks,
+          createdAt: req.createdAt,
+        }))
+        setIssuerRequests(mappedRequests)
+      } else {
+        toast({
+          title: "Error",
+          description: data.error || "Failed to fetch issuer requests",
+          variant: "destructive",
+        })
+        setIssuerRequests([])
+      }
+    } catch (error) {
+      console.error("Error fetching issuer requests:", error)
+      toast({
+        title: "Error",
+        description: "An unexpected error occurred while fetching issuer requests",
+        variant: "destructive",
+      })
+      setIssuerRequests([])
+    } finally {
+      setIsIssuerRequestsLoading(false)
+    }
+  }
+
+  // Calculate stats dynamically
   const totalIssuers = users.filter((user) => user.roles.includes("Issuer")).length
+  const totalAffidavits = affidavits.length
+  const pendingApprovals = issuerRequests.filter((req) => req.status.toLowerCase() === "pending").length
 
   const stats = [
     {
       title: "Total Users",
-      value: users.length.toString(), // Dynamically set the total users
+      value: users.length.toString(),
       icon: <Users className="h-5 w-5 text-blue-500" />,
       change: "+12 from last month",
       trend: "up",
     },
     {
       title: "Total Issuers",
-      value: totalIssuers.toString(), // Dynamically set the total issuers
+      value: totalIssuers.toString(),
       icon: <Users className="h-5 w-5 text-purple-500" />,
       change: "+3 from last month",
       trend: "up",
     },
     {
       title: "Total Affidavits",
-      value: "356",
+      value: totalAffidavits.toString(),
       icon: <FileText className="h-5 w-5 text-green-500" />,
       change: "+42 from last month",
       trend: "up",
     },
     {
       title: "Pending Approvals",
-      value: "24",
+      value: pendingApprovals.toString(),
       icon: <Clock className="h-5 w-5 text-orange-500" />,
       change: "+5 from last week",
       trend: "up",
     },
   ]
 
-  const affidavits = [
-    {
-      id: "AFF-2025-001",
-      title: "Property Transfer Deed",
-      issuer: "Jane Smith",
-      category: "Property",
-      dateIssued: "2025-03-10",
-      status: "Active",
-    },
-    {
-      id: "AFF-2025-002",
-      title: "Vehicle Ownership Transfer",
-      issuer: "Jane Smith",
-      category: "Vehicle",
-      dateIssued: "2025-03-08",
-      status: "Pending",
-    },
-    {
-      id: "AFF-2025-003",
-      title: "Business Partnership Agreement",
-      issuer: "David Wilson",
-      category: "Business",
-      dateIssued: "2025-03-05",
-      status: "Active",
-    },
-    {
-      id: "AFF-2025-004",
-      title: "Rental Agreement",
-      issuer: "David Wilson",
-      category: "Property",
-      dateIssued: "2025-03-01",
-      status: "Rejected",
-    },
-    {
-      id: "AFF-2025-005",
-      title: "Motorcycle Sale Agreement",
-      issuer: "Jane Smith",
-      category: "Vehicle",
-      dateIssued: "2025-02-28",
-      status: "Revoked",
-    },
-  ]
-
-  const issuerRequests = [
-    {
-      id: "REQ-001",
-      name: "David Wilson",
-      email: "david.wilson@example.com",
-      licenseNumber: "ATR-12345",
-      requestDate: "2025-03-05",
-      status: "Pending",
-    },
-    {
-      id: "REQ-002",
-      name: "Emma Taylor",
-      email: "emma.taylor@example.com",
-      licenseNumber: "ATR-67890",
-      requestDate: "2025-03-02",
-      status: "Approved",
-    },
-    {
-      id: "REQ-003",
-      name: "Alex Martin",
-      email: "alex.martin@example.com",
-      licenseNumber: "ATR-54321",
-      requestDate: "2025-02-28",
-      status: "Rejected",
-    },
-  ]
-
   const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "Active":
-        return <Badge className="bg-green-500">Active</Badge>
-      case "Pending":
+    switch (status.toLowerCase()) {
+      case "active":
+      case "approved":
+        return <Badge className="bg-green-500">Approved</Badge>
+      case "pending":
         return (
           <Badge variant="outline" className="text-orange-500 border-orange-500">
             Pending
           </Badge>
         )
-      case "Rejected":
+      case "rejected":
         return <Badge variant="destructive">Rejected</Badge>
-      case "Revoked":
+      case "revoked":
         return <Badge variant="destructive">Revoked</Badge>
-      case "Inactive":
+      case "inactive":
         return <Badge variant="secondary">Inactive</Badge>
-      case "Approved":
-        return <Badge className="bg-green-500">Approved</Badge>
       default:
         return <Badge variant="secondary">{status}</Badge>
     }
@@ -316,8 +360,8 @@ function AdminDashboard({ token }: { token: string }) {
   const filteredAffidavits = affidavits.filter((affidavit) => {
     const matchesSearch =
       affidavit.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      affidavit.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      affidavit.issuer.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      affidavit.displayId.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      affidavit.issuerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       affidavit.category.toLowerCase().includes(searchQuery.toLowerCase())
 
     const matchesStatus = statusFilter === "all" || affidavit.status.toLowerCase() === statusFilter.toLowerCase()
@@ -334,12 +378,57 @@ function AdminDashboard({ token }: { token: string }) {
       (user.formattedIdCardNumber !== "N/A" && user.formattedIdCardNumber.toLowerCase().includes(searchQuery.toLowerCase())),
   )
 
+  const filteredIssuerRequests = issuerRequests.filter(
+    (request) =>
+      request.userId.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      request.userId.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      request.organization.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      request.city.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      request.designation.toLowerCase().includes(searchQuery.toLowerCase())
+  )
+
   const handleViewUser = (userId: string) => {
     router.push(`/dashboard/users/${userId}`)
   }
 
-  const handleEditUser = (user: User) => {
-    router.push(`/dashboard/users/edit/${user._id}`)
+  const handleApproveIssuerRequest = async (requestId: string) => {
+    try {
+      const response = await fetch(`/api/issuer-requests/respond`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ requestId, action: "approve" }),
+      })
+      const data = await response.json()
+      if (data.success) {
+        toast({ title: "Success", description: "Issuer request approved", variant: "default" })
+        fetchIssuerRequests()
+      } else {
+        toast({ title: "Error", description: data.error || "Failed to approve issuer request", variant: "destructive" })
+      }
+    } catch (error) {
+      console.error("Error approving issuer request:", error)
+      toast({ title: "Error", description: "An unexpected error occurred", variant: "destructive" })
+    }
+  }
+
+  const handleRejectIssuerRequest = async (requestId: string) => {
+    try {
+      const response = await fetch(`/api/issuer-requests/respond`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ requestId, action: "reject" }),
+      })
+      const data = await response.json()
+      if (data.success) {
+        toast({ title: "Success", description: "Issuer request rejected", variant: "default" })
+        fetchIssuerRequests()
+      } else {
+        toast({ title: "Error", description: data.error || "Failed to reject issuer request", variant: "destructive" })
+      }
+    } catch (error) {
+      console.error("Error rejecting issuer request:", error)
+      toast({ title: "Error", description: "An unexpected error occurred", variant: "destructive" })
+    }
   }
 
   return (
@@ -431,21 +520,38 @@ function AdminDashboard({ token }: { token: string }) {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredAffidavits.map((affidavit) => (
-                      <TableRow key={affidavit.id}>
-                        <TableCell className="font-medium">{affidavit.id}</TableCell>
-                        <TableCell>{affidavit.title}</TableCell>
-                        <TableCell>{affidavit.issuer}</TableCell>
-                        <TableCell>{affidavit.category}</TableCell>
-                        <TableCell>{affidavit.dateIssued}</TableCell>
-                        <TableCell>{getStatusBadge(affidavit.status)}</TableCell>
-                        <TableCell className="text-right">
-                          <Button variant="ghost" size="sm">
-                            View
-                          </Button>
+                    {isAffidavitsLoading ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center py-8">
+                          Loading affidavits...
                         </TableCell>
                       </TableRow>
-                    ))}
+                    ) : filteredAffidavits.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center py-8">
+                          <div className="flex flex-col items-center justify-center text-gray-500">
+                            <AlertCircle className="h-10 w-10 mb-2" />
+                            <p>No affidavits found</p>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      filteredAffidavits.map((affidavit) => (
+                        <TableRow key={affidavit._id}>
+                          <TableCell className="font-medium">{affidavit.displayId}</TableCell>
+                          <TableCell>{affidavit.title}</TableCell>
+                          <TableCell>{affidavit.issuerName}</TableCell>
+                          <TableCell>{affidavit.category}</TableCell>
+                          <TableCell>{new Date(affidavit.dateIssued).toLocaleDateString()}</TableCell>
+                          <TableCell>{getStatusBadge(affidavit.status)}</TableCell>
+                          <TableCell className="text-right">
+                            <Button asChild variant="ghost" size="sm">
+                              <Link href={`/affidavit/${affidavit.displayId}`}>View</Link>
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
                   </TableBody>
                 </Table>
               </CardContent>
@@ -512,23 +618,9 @@ function AdminDashboard({ token }: { token: string }) {
                           <TableCell>{new Date(user.createdAt).toLocaleDateString()}</TableCell>
                           <TableCell>{getStatusBadge(user.status)}</TableCell>
                           <TableCell className="text-right">
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon">
-                                  <MoreVertical className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={() => handleViewUser(user._id)}>
-                                  <Eye className="mr-2 h-4 w-4" />
-                                  View Details
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => handleEditUser(user)}>
-                                  <Edit className="mr-2 h-4 w-4" />
-                                  Edit User
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
+                            <Button variant="ghost" size="sm" onClick={() => handleViewUser(user._id)}>
+                              <Eye className="h-4 w-4" />
+                            </Button>
                           </TableCell>
                         </TableRow>
                       ))
@@ -549,51 +641,72 @@ function AdminDashboard({ token }: { token: string }) {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>ID</TableHead>
                       <TableHead>Name</TableHead>
                       <TableHead>Email</TableHead>
-                      <TableHead>License Number</TableHead>
-                      <TableHead>Request Date</TableHead>
+                      <TableHead>Organization</TableHead>
+                      <TableHead>City</TableHead>
+                      <TableHead>Designation</TableHead>
+                      <TableHead>Date of Joining</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {issuerRequests.map((request) => (
-                      <TableRow key={request.id}>
-                        <TableCell className="font-medium">{request.id}</TableCell>
-                        <TableCell>{request.name}</TableCell>
-                        <TableCell>{request.email}</TableCell>
-                        <TableCell>{request.licenseNumber}</TableCell>
-                        <TableCell>{request.requestDate}</TableCell>
-                        <TableCell>{getStatusBadge(request.status)}</TableCell>
-                        <TableCell className="text-right space-x-2">
-                          {request.status === "Pending" && (
-                            <>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="bg-green-50 text-green-600 border-green-200 hover:bg-green-100 hover:text-green-700"
-                              >
-                                Approve
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="bg-red-50 text-red-600 border-red-200 hover:bg-red-100 hover:text-red-700"
-                              >
-                                Reject
-                              </Button>
-                            </>
-                          )}
-                          {request.status !== "Pending" && (
-                            <Button variant="ghost" size="sm">
-                              View
-                            </Button>
-                          )}
+                    {isIssuerRequestsLoading ? (
+                      <TableRow>
+                        <TableCell colSpan={8} className="text-center py-8">
+                          Loading issuer requests...
                         </TableCell>
                       </TableRow>
-                    ))}
+                    ) : filteredIssuerRequests.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={8} className="text-center py-8">
+                          <div className="flex flex-col items-center justify-center text-gray-500">
+                            <AlertCircle className="h-10 w-10 mb-2" />
+                            <p>No issuer requests found</p>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      filteredIssuerRequests.map((request) => (
+                        <TableRow key={request._id}>
+                          <TableCell className="font-medium">{request.userId.name}</TableCell>
+                          <TableCell>{request.userId.email}</TableCell>
+                          <TableCell>{request.organization}</TableCell>
+                          <TableCell>{request.city}</TableCell>
+                          <TableCell>{request.designation}</TableCell>
+                          <TableCell>{new Date(request.dateOfJoining).toLocaleDateString()}</TableCell>
+                          <TableCell>{getStatusBadge(request.status)}</TableCell>
+                          <TableCell className="text-right space-x-2">
+                            {request.status === "Pending" && (
+                              <>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="bg-green-50 text-green-600 border-green-200 hover:bg-green-100 hover:text-green-700"
+                                  onClick={() => handleApproveIssuerRequest(request._id)}
+                                >
+                                  Approve
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="bg-red-50 text-red-600 border-red-200 hover:bg-red-100 hover:text-red-700"
+                                  onClick={() => handleRejectIssuerRequest(request._id)}
+                                >
+                                  Reject
+                                </Button>
+                              </>
+                            )}
+                            {request.status !== "Pending" && (
+                              <Button variant="ghost" size="sm">
+                                View
+                              </Button>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
                   </TableBody>
                 </Table>
               </CardContent>
@@ -605,24 +718,69 @@ function AdminDashboard({ token }: { token: string }) {
   )
 }
 
-// Issuer Dashboard Component (Unchanged)
-function IssuerDashboard() {
+// Issuer Dashboard Component
+function IssuerDashboard({ token, userId }: { token: string; userId: string }) {
   const [searchQuery, setSearchQuery] = useState("")
+  const [statusFilter, setStatusFilter] = useState("all")
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false)
-  const [isStatusDialogOpen, setIsStatusDialogOpen] = useState(false)
   const [selectedAffidavit, setSelectedAffidavit] = useState<Affidavit | null>(null)
+  const [affidavitRequests, setAffidavitRequests] = useState<AffidavitRequest[]>([])
+  const [isLoadingRequests, setIsLoadingRequests] = useState(true)
+
+  useEffect(() => {
+    fetchAffidavitRequests()
+  }, [userId, token])
+
+  const fetchAffidavitRequests = async () => {
+    setIsLoadingRequests(true)
+    try {
+      const response = await fetch(`/api/affidavits/affidavit-requests/get?userId=${userId}&activeRole=Issuer`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
+      }
+      const data = await response.json()
+      if (data.success) {
+        setAffidavitRequests(data.affidavitRequests || [])
+      } else {
+        setAffidavitRequests([])
+        toast({
+          title: "Error",
+          description: data.error || "Failed to fetch affidavit requests",
+          variant: "destructive",
+        })
+      }
+    } catch (error: any) {
+      setAffidavitRequests([])
+      toast({
+        title: "Error",
+        description: error.message || "Failed to fetch affidavit requests.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoadingRequests(false)
+    }
+  }
+
+  // Calculate stats dynamically
+  const totalRequests = affidavitRequests.length
+  const pendingRequests = affidavitRequests.filter((req) => req.status.toLowerCase() === "pending").length
+  const acceptedRequests = affidavitRequests.filter((req) => req.status.toLowerCase() === "accepted").length
+  const rejectedRequests = affidavitRequests.filter((req) => req.status.toLowerCase() === "rejected").length
 
   const stats = [
     {
       title: "Issued Affidavits",
-      value: "150",
+      value: acceptedRequests.toString(),
       icon: <FileText className="h-5 w-5 text-blue-500" />,
       change: "+10 from last month",
       trend: "up",
     },
     {
       title: "Affidavit Requests",
-      value: "20",
+      value: totalRequests.toString(),
       icon: <Clock className="h-5 w-5 text-orange-500" />,
       change: "+5 from last week",
       trend: "up",
@@ -630,103 +788,64 @@ function IssuerDashboard() {
     {
       title: "Flagged Witnesses",
       value: "5",
-      icon: <Flag className="h-5 w-5 text-red-500" />,
+      icon: <XCircle className="h-5 w-5 text-red-500" />,
       change: "+2 from last month",
       trend: "up",
     },
     {
       title: "Rejected Affidavits",
-      value: "8",
+      value: rejectedRequests.toString(),
       icon: <XCircle className="h-5 w-5 text-red-500" />,
       change: "-3 from last month",
       trend: "down",
     },
   ]
 
-  const affidavits: Affidavit[] = [
-    {
-      id: "AFF-2025-001",
-      title: "Property Transfer Deed",
-      category: "Property",
-      dateIssued: "2025-03-10",
-      parties: "John Doe, Jane Smith",
-      status: "Active",
-    },
-    {
-      id: "AFF-2025-002",
-      title: "Vehicle Ownership Transfer",
-      category: "Vehicle",
-      dateIssued: "2025-03-08",
-      parties: "Mike Johnson, Sarah Williams",
-      status: "Pending",
-    },
-    {
-      id: "AFF-2025-003",
-      title: "Business Partnership Agreement",
-      category: "Business",
-      dateIssued: "2025-03-05",
-      parties: "Robert Brown, Lisa Davis",
-      status: "Active",
-    },
-    {
-      id: "AFF-2025-004",
-      title: "Rental Agreement",
-      category: "Property",
-      dateIssued: "2025-03-01",
-      parties: "David Wilson, Emma Taylor",
-      status: "Rejected",
-    },
-    {
-      id: "AFF-2025-005",
-      title: "Motorcycle Sale Agreement",
-      category: "Vehicle",
-      dateIssued: "2025-02-28",
-      parties: "Alex Martin, Olivia Moore",
-      status: "Active",
-    },
-  ]
-
   const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "Active":
+    switch (status.toLowerCase()) {
+      case "active":
+      case "accepted":
         return <Badge className="bg-green-500">Active</Badge>
-      case "Pending":
+      case "pending":
         return (
           <Badge variant="outline" className="text-orange-500 border-orange-500">
             Pending
           </Badge>
         )
-      case "Rejected":
+      case "rejected":
         return <Badge variant="destructive">Rejected</Badge>
       default:
         return <Badge variant="secondary">{status}</Badge>
     }
   }
 
-  const filteredAffidavits = affidavits.filter(
-    (affidavit) =>
-      affidavit.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      affidavit.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      affidavit.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      affidavit.parties.toLowerCase().includes(searchQuery.toLowerCase()),
-  )
+  const filteredAffidavitRequests = affidavitRequests.filter((request) => {
+    const matchesSearch =
+      request.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      request.displayId.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      request.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      request.issuerId.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (request.sellerId?.name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (request.buyerId?.name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+      request.witnesses.some((w) => w.contactId.name.toLowerCase().includes(searchQuery.toLowerCase()))
 
-  const handleViewAffidavit = (affidavit: Affidavit) => {
-    setSelectedAffidavit(affidavit)
-    setIsViewDialogOpen(true)
-  }
+    const matchesStatus = statusFilter === "all" || request.status.toLowerCase() === statusFilter.toLowerCase()
 
-  const handleChangeStatus = (affidavit: Affidavit) => {
-    setSelectedAffidavit(affidavit)
-    setIsStatusDialogOpen(true)
-  }
+    return matchesSearch && matchesStatus
+  })
 
-  const handleMarkFakeWitnesses = (affidavit: Affidavit) => {
-    toast({
-      title: "Fake Witnesses Marked",
-      description: `Witnesses for affidavit ${affidavit.id} have been flagged as fake.`,
-      variant: "default",
+  const handleViewAffidavit = (request: AffidavitRequest) => {
+    setSelectedAffidavit({
+      _id: request._id,
+      displayId: request.displayId,
+      title: request.title,
+      category: request.category,
+      issuerId: request.issuerId,
+      issuerName: request.issuerId.name,
+      dateIssued: request.createdAt,
+      status: request.status,
     })
+    setIsViewDialogOpen(true)
   }
 
   return (
@@ -765,7 +884,7 @@ function IssuerDashboard() {
         </div>
 
         {/* Affidavits Table */}
-        <Tabs defaultValue="all" className="w-full">
+        <Tabs defaultValue="all" className="w-full" onValueChange={setStatusFilter}>
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
             <TabsList>
               <TabsTrigger value="all">All Affidavits</TabsTrigger>
@@ -785,8 +904,8 @@ function IssuerDashboard() {
           </div>
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle>All Affidavits</CardTitle>
-              <CardDescription>View and manage affidavits</CardDescription>
+              <CardTitle>All Affidavit Requests</CardTitle>
+              <CardDescription>View and manage affidavit requests</CardDescription>
             </CardHeader>
             <CardContent>
               <Table>
@@ -796,52 +915,38 @@ function IssuerDashboard() {
                     <TableHead>Title</TableHead>
                     <TableHead>Category</TableHead>
                     <TableHead>Date</TableHead>
-                    <TableHead>Parties</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredAffidavits.length > 0 ? (
-                    filteredAffidavits.map((affidavit) => (
-                      <TableRow key={affidavit.id}>
-                        <TableCell className="font-medium">{affidavit.id}</TableCell>
-                        <TableCell>{affidavit.title}</TableCell>
-                        <TableCell>{affidavit.category}</TableCell>
-                        <TableCell>{affidavit.dateIssued}</TableCell>
-                        <TableCell>{affidavit.parties}</TableCell>
-                        <TableCell>{getStatusBadge(affidavit.status)}</TableCell>
+                  {isLoadingRequests ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-8">
+                        Loading affidavit requests...
+                      </TableCell>
+                    </TableRow>
+                  ) : filteredAffidavitRequests.length > 0 ? (
+                    filteredAffidavitRequests.map((request) => (
+                      <TableRow key={request._id}>
+                        <TableCell className="font-medium">{request.displayId}</TableCell>
+                        <TableCell>{request.title}</TableCell>
+                        <TableCell>{request.category}</TableCell>
+                        <TableCell>{new Date(request.createdAt).toLocaleDateString()}</TableCell>
+                        <TableCell>{getStatusBadge(request.status)}</TableCell>
                         <TableCell className="text-right">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="sm">
-                                <MoreVertical className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => handleViewAffidavit(affidavit)}>
-                                <Eye className="h-4 w-4 mr-2" />
-                                View
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleChangeStatus(affidavit)}>
-                                <Edit className="h-4 w-4 mr-2" />
-                                Change Status
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleMarkFakeWitnesses(affidavit)}>
-                                <Flag className="h-4 w-4 mr-2" />
-                                Mark Fake Witnesses
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                          <Button variant="ghost" size="sm" onClick={() => handleViewAffidavit(request)}>
+                            <Eye className="h-4 w-4" />
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center py-6">
+                      <TableCell colSpan={6} className="text-center py-6">
                         <div className="flex flex-col items-center justify-center text-gray-500">
                           <AlertCircle className="h-10 w-10 mb-2" />
-                          <p>No affidavits found matching your search criteria</p>
+                          <p>No affidavit requests found</p>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -856,16 +961,16 @@ function IssuerDashboard() {
         <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>View Affidavit</DialogTitle>
+              <DialogTitle>View Affidavit Request</DialogTitle>
               <DialogDescription>
-                Details of the selected affidavit.
+                Details of the selected affidavit request.
               </DialogDescription>
             </DialogHeader>
             {selectedAffidavit && (
               <div className="space-y-4">
                 <div>
                   <Label>ID</Label>
-                  <p className="text-sm text-gray-500">{selectedAffidavit.id}</p>
+                  <p className="text-sm text-gray-500">{selectedAffidavit.displayId}</p>
                 </div>
                 <div>
                   <Label>Title</Label>
@@ -876,12 +981,8 @@ function IssuerDashboard() {
                   <p className="text-sm text-gray-500">{selectedAffidavit.category}</p>
                 </div>
                 <div>
-                  <Label>Date Issued</Label>
-                  <p className="text-sm text-gray-500">{selectedAffidavit.dateIssued}</p>
-                </div>
-                <div>
-                  <Label>Parties</Label>
-                  <p className="text-sm text-gray-500">{selectedAffidavit.parties}</p>
+                  <Label>Date Requested</Label>
+                  <p className="text-sm text-gray-500">{new Date(selectedAffidavit.dateIssued).toLocaleDateString()}</p>
                 </div>
                 <div>
                   <Label>Status</Label>
@@ -894,72 +995,23 @@ function IssuerDashboard() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
-
-        {/* Change Status Dialog */}
-        <Dialog open={isStatusDialogOpen} onOpenChange={setIsStatusDialogOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Change Affidavit Status</DialogTitle>
-              <DialogDescription>
-                Update the status of the affidavit.
-              </DialogDescription>
-            </DialogHeader>
-            {selectedAffidavit && (
-              <div className="space-y-4">
-                <div>
-                  <Label>ID</Label>
-                  <p className="text-sm text-gray-500">{selectedAffidavit.id}</p>
-                </div>
-                <div>
-                  <Label>Title</Label>
-                  <p className="text-sm text-gray-500">{selectedAffidavit.title}</p>
-                </div>
-                <div>
-                  <Label>Current Status</Label>
-                  <p className="text-sm text-gray-500">{selectedAffidavit.status}</p>
-                </div>
-                <div>
-                  <Label>New Status</Label>
-                  <Select defaultValue={selectedAffidavit.status}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Active">Active</SelectItem>
-                      <SelectItem value="Pending">Pending</SelectItem>
-                      <SelectItem value="Rejected">Rejected</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Reason for Change</Label>
-                  <Input placeholder="Enter reason for status change" />
-                </div>
-              </div>
-            )}
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsStatusDialogOpen(false)}>
-                Cancel
-              </Button>
-              <Button>Save Changes</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
       </div>
     </ProtectedRoute>
   )
 }
 
-// User Dashboard Component (Unchanged)
-function UserDashboard() {
+// User Dashboard Component
+function UserDashboard({ token, userId }: { token: string; userId: string }) {
   const { user, isAuthenticated, isLoading, logout } = useAuth()
   const router = useRouter()
-
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
+  const [statusFilter, setStatusFilter] = useState("all")
+  const [categoryFilter, setCategoryFilter] = useState("all")
+  const [affidavits, setAffidavits] = useState<Affidavit[]>([])
+  const [isAffidavitsLoading, setIsAffidavitsLoading] = useState(true)
 
   useEffect(() => {
-    console.log("UserDashboard auth state:", { isLoading, isAuthenticated, user: user?.email })
     if (!isLoading && !isAuthenticated) {
       console.log("UserDashboard redirecting to /login")
       toast({
@@ -969,105 +1021,110 @@ function UserDashboard() {
       })
       router.push("/login")
     }
-  }, [isLoading, isAuthenticated, router])
+    if (userId) {
+      fetchAffidavits()
+    }
+  }, [isLoading, isAuthenticated, router, userId])
+
+  const fetchAffidavits = async () => {
+    setIsAffidavitsLoading(true)
+    try {
+      const response = await fetch(`/api/affidavits/get-all?userId=${userId}&role=User`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
+      }
+      const data = await response.json()
+      if (data.success) {
+        // Map affidavits to match the expected interface
+        const mappedAffidavits = data.affidavits.map((aff: any) => ({
+          _id: aff._id,
+          displayId: aff.displayId,
+          title: aff.title,
+          category: aff.category,
+          issuerId: aff.issuerId,
+          issuerName: aff.issuerId?.name || "Unknown",
+          dateRequested: aff.dateIssued || aff.createdAt,
+          status: aff.status || "Active",
+          parties: `${aff.sellerId?.name || "N/A"}, ${aff.buyerId?.name || "N/A"}`,
+        }))
+        setAffidavits(mappedAffidavits)
+      } else {
+        setAffidavits([])
+        toast({ title: "Error", description: data.error || "Failed to fetch affidavits", variant: "destructive" })
+      }
+    } catch (error: any) {
+      setAffidavits([])
+      toast({ title: "Error", description: error.message || "Failed to fetch affidavits.", variant: "destructive" })
+    } finally {
+      setIsAffidavitsLoading(false)
+    }
+  }
+
+  // Calculate stats dynamically
+  const totalAffidavits = affidavits.length
+  const pendingAffidavits = affidavits.filter((aff) => aff.status.toLowerCase() === "pending").length
+  const approvedAffidavits = affidavits.filter((aff) => aff.status.toLowerCase() === "active").length
+  const rejectedAffidavits = affidavits.filter((aff) => aff.status.toLowerCase() === "rejected").length
 
   const stats = [
     {
       title: "Total Affidavits",
-      value: "12",
+      value: totalAffidavits.toString(),
       icon: <FileText className="h-5 w-5 text-blue-500" />,
       change: "+2 from last month",
       trend: "up",
     },
     {
       title: "Pending Approval",
-      value: "3",
+      value: pendingAffidavits.toString(),
       icon: <Clock className="h-5 w-5 text-orange-500" />,
       change: "+1 from last week",
       trend: "up",
     },
     {
       title: "Approved",
-      value: "8",
+      value: approvedAffidavits.toString(),
       icon: <CheckCircle className="h-5 w-5 text-green-500" />,
       change: "Same as last month",
       trend: "neutral",
     },
     {
       title: "Rejected",
-      value: "1",
+      value: rejectedAffidavits.toString(),
       icon: <XCircle className="h-5 w-5 text-red-500" />,
       change: "-1 from last month",
       trend: "down",
     },
   ]
 
-  const recentAffidavits = [
-    {
-      id: "AFF-2025-001",
-      title: "Property Transfer Deed",
-      category: "Property",
-      dateRequested: "2025-03-10",
-      status: "Active",
-      parties: "John Doe, Jane Smith",
-    },
-    {
-      id: "AFF-2025-002",
-      title: "Vehicle Ownership Transfer",
-      category: "Vehicle",
-      dateRequested: "2025-03-08",
-      status: "Pending",
-      parties: "Mike Johnson, Sarah Williams",
-    },
-    {
-      id: "AFF-2025-003",
-      title: "Business Partnership Agreement",
-      category: "Business",
-      dateRequested: "2025-03-05",
-      status: "Active",
-      parties: "Robert Brown, Lisa Davis",
-    },
-    {
-      id: "AFF-2025-004",
-      title: "Rental Agreement",
-      category: "Property",
-      dateRequested: "2025-03-01",
-      status: "Rejected",
-      parties: "David Wilson, Emma Taylor",
-    },
-    {
-      id: "AFF-2025-005",
-      title: "Motorcycle Sale Agreement",
-      category: "Vehicle",
-      dateRequested: "2025-02-28",
-      status: "Active",
-      parties: "Alex Martin, Olivia Moore",
-    },
-  ]
-
   const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "Active":
+    switch (status.toLowerCase()) {
+      case "active":
         return <Badge className="bg-green-500">Active</Badge>
-      case "Pending":
+      case "pending":
         return (
           <Badge variant="outline" className="text-orange-500 border-orange-500">
             Pending
           </Badge>
         )
-      case "Rejected":
+      case "rejected":
         return <Badge variant="destructive">Rejected</Badge>
       default:
         return <Badge variant="secondary">{status}</Badge>
     }
   }
 
-  const filteredAffidavits = recentAffidavits.filter(
+  const filteredAffidavits = affidavits.filter(
     (affidavit) =>
-      affidavit.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      affidavit.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      affidavit.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      affidavit.parties.toLowerCase().includes(searchQuery.toLowerCase()),
+      (affidavit.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        affidavit.displayId.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        affidavit.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        affidavit.parties.toLowerCase().includes(searchQuery.toLowerCase())) &&
+      (statusFilter === "all" || affidavit.status.toLowerCase() === statusFilter.toLowerCase()) &&
+      (categoryFilter === "all" || affidavit.category.toLowerCase() === categoryFilter.toLowerCase())
   )
 
   const handleLogout = () => {
@@ -1116,7 +1173,7 @@ function UserDashboard() {
             </Card>
           ))}
         </div>
-        <Tabs defaultValue="all" className="w-full">
+        <Tabs defaultValue="all" className="w-full" onValueChange={setStatusFilter}>
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
             <TabsList>
               <TabsTrigger value="all">All Affidavits</TabsTrigger>
@@ -1124,14 +1181,20 @@ function UserDashboard() {
               <TabsTrigger value="pending">Pending</TabsTrigger>
               <TabsTrigger value="rejected">Rejected</TabsTrigger>
             </TabsList>
-            <div className="relative w-full md:w-64">
-              <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
-              <Input
-                placeholder="Search affidavits..."
-                className="pl-8"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
+            <div className="flex items-center gap-2">
+              <Filter className="h-4 w-4 text-gray-400" />
+              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Filter by category" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Categories</SelectItem>
+                  <SelectItem value="property">Property</SelectItem>
+                  <SelectItem value="vehicle">Vehicle</SelectItem>
+                  <SelectItem value="business">Business</SelectItem>
+                  <SelectItem value="personal">Personal</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <Card>
@@ -1153,18 +1216,24 @@ function UserDashboard() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredAffidavits.length > 0 ? (
+                  {isAffidavitsLoading ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center py-8">
+                        Loading affidavits...
+                      </TableCell>
+                    </TableRow>
+                  ) : filteredAffidavits.length > 0 ? (
                     filteredAffidavits.map((affidavit) => (
-                      <TableRow key={affidavit.id}>
-                        <TableCell className="font-medium">{affidavit.id}</TableCell>
+                      <TableRow key={affidavit._id}>
+                        <TableCell className="font-medium">{affidavit.displayId}</TableCell>
                         <TableCell>{affidavit.title}</TableCell>
                         <TableCell>{affidavit.category}</TableCell>
-                        <TableCell>{affidavit.dateRequested}</TableCell>
+                        <TableCell>{new Date(affidavit.dateRequested).toLocaleDateString()}</TableCell>
                         <TableCell>{affidavit.parties}</TableCell>
                         <TableCell>{getStatusBadge(affidavit.status)}</TableCell>
                         <TableCell className="text-right">
                           <Button asChild variant="ghost" size="sm">
-                            <Link href={`/affidavit/${affidavit.id}`}>View</Link>
+                            <Link href={`/affidavit/${affidavit.displayId}`}>View</Link>
                           </Button>
                         </TableCell>
                       </TableRow>
@@ -1174,7 +1243,7 @@ function UserDashboard() {
                       <TableCell colSpan={7} className="text-center py-6">
                         <div className="flex flex-col items-center justify-center text-gray-500">
                           <AlertCircle className="h-10 w-10 mb-2" />
-                          <p>No affidavits found matching your search criteria</p>
+                          <p>No affidavits found</p>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -1189,3 +1258,8 @@ function UserDashboard() {
     </ProtectedRoute>
   )
 }
+
+
+
+
+//earlier 1191 lines then 1408 then 1252  was also working

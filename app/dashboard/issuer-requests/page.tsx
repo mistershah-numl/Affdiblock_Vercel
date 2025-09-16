@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect } from "react"
@@ -29,37 +30,152 @@ import {
   Calendar,
   Building,
   MapPin,
+  Loader2,
 } from "lucide-react"
-import { getIssuerRequests, approveIssuerRequest, rejectIssuerRequest } from "@/lib/api/users"
+import { toast } from "@/components/ui/use-toast"
+import { useAuth } from "@/lib/auth-context"
+
+interface IssuerRequest {
+  _id: string
+  userId: { _id: string; name: string; email: string; idCardNumber?: string }
+  licenseUrl: string
+  organization: string
+  city: string
+  designation: string
+  dateOfJoining: string
+  status: string
+  remarks?: string
+  createdAt: string
+}
 
 export default function IssuerRequestsPage() {
   const router = useRouter()
-  const [requests, setRequests] = useState<any[]>([])
-  const [filteredRequests, setFilteredRequests] = useState<any[]>([])
+  const { user, token, isLoading, isAuthenticated } = useAuth()
+  const [requests, setRequests] = useState<IssuerRequest[]>([])
+  const [filteredRequests, setFilteredRequests] = useState<IssuerRequest[]>([])
   const [searchQuery, setSearchQuery] = useState("")
-  const [isLoading, setIsLoading] = useState(true)
+  const [isLoadingRequests, setIsLoadingRequests] = useState(true)
+  const [isDocumentLoading, setIsDocumentLoading] = useState(false)
+  const [documentType, setDocumentType] = useState<"image" | "pdf" | null>(null)
 
   // Review dialog state
   const [isReviewDialogOpen, setIsReviewDialogOpen] = useState(false)
-  const [selectedRequest, setSelectedRequest] = useState<any>(null)
+  const [selectedRequest, setSelectedRequest] = useState<IssuerRequest | null>(null)
   const [reviewNotes, setReviewNotes] = useState("")
 
   // Document preview dialog
   const [isDocumentPreviewOpen, setIsDocumentPreviewOpen] = useState(false)
   const [previewDocument, setPreviewDocument] = useState<{ title: string; url: string } | null>(null)
 
+  // Debug auth state
   useEffect(() => {
-    fetchRequests()
-  }, [])
+    if (!isLoading && isAuthenticated && user) {
+      console.log("🔍 Auth state:", {
+        userId: user._id,
+        name: user.name,
+        email: user.email,
+        roles: user.roles,
+        activeRole: user.activeRole,
+        tokenLength: token?.length || 0
+      })
+    }
+  }, [isLoading, isAuthenticated, user, token])
 
+  // Ensure admin access
+  useEffect(() => {
+    if (!isLoading && (!isAuthenticated || user?.activeRole !== "Admin")) {
+      console.log("❌ Access denied:", {
+        isAuthenticated,
+        activeRole: user?.activeRole,
+        roles: user?.roles
+      })
+      toast({
+        title: "Access Denied",
+        description: "Only admins can access this page.",
+        variant: "destructive",
+      })
+      router.push("/login")
+    }
+  }, [isLoading, isAuthenticated, user, router])
+
+  // Fetch issuer requests
+  useEffect(() => {
+    if (token && isAuthenticated && user?.activeRole === "Admin") {
+      fetchRequests()
+    }
+  }, [token, isAuthenticated, user])
+
+  const fetchRequests = async () => {
+    setIsLoadingRequests(true)
+    try {
+      const response = await fetch("/api/issuer-requests", {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      console.log("📡 Fetch issuer requests response status:", response.status)
+      const data = await response.json()
+      console.log("📋 Fetch issuer requests data:", {
+        success: data.success,
+        dataLength: data.data?.length || 0
+      })
+
+      if (data.success) {
+        const mappedRequests = data.data.map((req: any) => ({
+          _id: req._id,
+          userId: {
+            _id: req.user._id,
+            name: req.user.name || "Unknown",
+            email: req.user.email || "Unknown",
+            idCardNumber: req.user.idCardNumber || "N/A",
+          },
+          licenseUrl: req.licenseUrl,
+          organization: req.organization,
+          city: req.city,
+          designation: req.designation,
+          dateOfJoining: req.dateOfJoining,
+          status: req.status,
+          remarks: req.remarks,
+          createdAt: req.createdAt,
+        }))
+        setRequests(mappedRequests)
+        setFilteredRequests(mappedRequests)
+        console.log("✅ Requests fetched:", mappedRequests.length)
+      } else {
+        console.log("❌ Fetch failed:", data.error)
+        toast({
+          title: "Error",
+          description: data.error || "Failed to fetch issuer requests",
+          variant: "destructive",
+        })
+        setRequests([])
+        setFilteredRequests([])
+      }
+    } catch (error: any) {
+      console.error("💥 Error fetching issuer requests:", {
+        message: error.message,
+        stack: error.stack
+      })
+      toast({
+        title: "Error",
+        description: "An unexpected error occurred while fetching issuer requests",
+        variant: "destructive",
+      })
+      setRequests([])
+      setFilteredRequests([])
+    } finally {
+      setIsLoadingRequests(false)
+    }
+  }
+
+  // Filter requests based on search query
   useEffect(() => {
     if (searchQuery) {
       const filtered = requests.filter(
         (request) =>
-          request.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          request.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          request.userId.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          request.userId.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
           request.organization.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          request.licenseNumber.toLowerCase().includes(searchQuery.toLowerCase()),
+          request.city.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          request.designation.toLowerCase().includes(searchQuery.toLowerCase()),
       )
       setFilteredRequests(filtered)
     } else {
@@ -67,79 +183,152 @@ export default function IssuerRequestsPage() {
     }
   }, [searchQuery, requests])
 
-  const fetchRequests = async () => {
-    setIsLoading(true)
-    try {
-      const response = await getIssuerRequests()
-      if (response.success) {
-        setRequests(response.requests)
-        setFilteredRequests(response.requests)
-      }
-    } catch (error) {
-      console.error("Error fetching issuer requests:", error)
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
   const handleViewUser = (userId: string) => {
+    console.log("👀 Viewing user:", userId)
     router.push(`/dashboard/users/${userId}`)
   }
 
-  const handleOpenReviewDialog = (request: any) => {
+  const handleOpenReviewDialog = (request: IssuerRequest) => {
+    console.log("📝 Opening review dialog for request:", request._id)
     setSelectedRequest(request)
-    setReviewNotes("")
+    setReviewNotes(request.remarks || "")
     setIsReviewDialogOpen(true)
   }
 
   const handleApproveRequest = async () => {
-    if (!selectedRequest) return
+    if (!selectedRequest || !token) return
 
+    console.log("✅ Initiating approve request:", selectedRequest._id)
     try {
-      const response = await approveIssuerRequest(selectedRequest._id, "admin_123456789")
-      if (response.success) {
-        // Update the request in the list
+      const response = await fetch("/api/issuer-requests/approve", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ requestId: selectedRequest._id }),
+      })
+      const data = await response.json()
+      console.log("📡 Approve response:", {
+        status: response.status,
+        success: data.success,
+        error: data.error
+      })
+
+      if (data.success) {
+        toast({
+          title: "Success",
+          description: "Issuer request approved",
+          variant: "default",
+        })
+        // Update local state
         const updatedRequests = requests.map((request) =>
-          request._id === selectedRequest._id ? { ...request, status: "Approved", reviewNotes } : request,
+          request._id === selectedRequest._id ? { ...request, status: "Approved" } : request,
         )
         setRequests(updatedRequests)
+        setFilteredRequests(updatedRequests)
         setIsReviewDialogOpen(false)
+      } else {
+        toast({
+          title: "Error",
+          description: data.error || "Failed to approve issuer request",
+          variant: "destructive",
+        })
       }
-    } catch (error) {
-      console.error("Error approving request:", error)
+    } catch (error: any) {
+      console.error("💥 Error approving issuer request:", {
+        message: error.message,
+        stack: error.stack
+      })
+      toast({
+        title: "Error",
+        description: "An unexpected error occurred",
+        variant: "destructive",
+      })
     }
   }
 
   const handleRejectRequest = async () => {
-    if (!selectedRequest || !reviewNotes) return
+    if (!selectedRequest || !reviewNotes || !token) return
 
+    console.log("❌ Initiating reject request:", selectedRequest._id, { remarks: reviewNotes })
     try {
-      const response = await rejectIssuerRequest(selectedRequest._id, "admin_123456789", reviewNotes)
-      if (response.success) {
-        // Update the request in the list
+      const response = await fetch("/api/issuer-requests/reject", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ requestId: selectedRequest._id, remarks: reviewNotes }),
+      })
+      const data = await response.json()
+      console.log("📡 Reject response:", {
+        status: response.status,
+        success: data.success,
+        error: data.error
+      })
+
+      if (data.success) {
+        toast({
+          title: "Success",
+          description: "Issuer request rejected",
+          variant: "default",
+        })
+        // Update local state
         const updatedRequests = requests.map((request) =>
-          request._id === selectedRequest._id ? { ...request, status: "Rejected", reviewNotes } : request,
+          request._id === selectedRequest._id ? { ...request, status: "Rejected", remarks: reviewNotes } : request,
         )
         setRequests(updatedRequests)
+        setFilteredRequests(updatedRequests)
         setIsReviewDialogOpen(false)
+      } else {
+        toast({
+          title: "Error",
+          description: data.error || "Failed to reject issuer request",
+          variant: "destructive",
+        })
       }
-    } catch (error) {
-      console.error("Error rejecting request:", error)
+    } catch (error: any) {
+      console.error("💥 Error rejecting issuer request:", {
+        message: error.message,
+        stack: error.stack
+      })
+      toast({
+        title: "Error",
+        description: "An unexpected error occurred",
+        variant: "destructive",
+      })
     }
   }
 
-  const handleViewDocument = (title: string, url: string) => {
+  const handleViewDocument = async (title: string, url: string) => {
+    console.log("📄 Viewing document:", { title, url })
+    setIsDocumentLoading(true)
     setPreviewDocument({ title, url })
     setIsDocumentPreviewOpen(true)
+
+    // Determine file type
+    try {
+      const response = await fetch(url, { method: "HEAD" })
+      const contentType = response.headers.get("content-type")
+      console.log("📋 Document content-type:", contentType)
+      setDocumentType(contentType?.includes("pdf") ? "pdf" : "image")
+    } catch (error) {
+      console.error("💥 Error fetching document metadata:", error)
+      // Fallback to extension-based check
+      setDocumentType(url.toLowerCase().endsWith(".pdf") ? "pdf" : "image")
+    } finally {
+      setIsDocumentLoading(false)
+    }
   }
 
   const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "Pending":
+    switch (status.toLowerCase()) {
+      case "pending":
         return <Badge className="bg-yellow-500">Pending</Badge>
-      case "Approved":
+      case "approved":
         return <Badge className="bg-green-500">Approved</Badge>
-      case "Rejected":
+      case "rejected":
         return <Badge className="bg-red-500">Rejected</Badge>
       default:
         return <Badge variant="outline">{status}</Badge>
@@ -177,16 +366,16 @@ export default function IssuerRequestsPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Applicant</TableHead>
-                <TableHead>License Number</TableHead>
                 <TableHead>Organization</TableHead>
                 <TableHead>City</TableHead>
-                <TableHead>Application Date</TableHead>
+                <TableHead>Designation</TableHead>
+                <TableHead>Date of Joining</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {isLoading ? (
+              {isLoadingRequests ? (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center py-8">
                     Loading requests...
@@ -208,15 +397,15 @@ export default function IssuerRequestsPage() {
                       <div className="flex items-center gap-2">
                         <User className="h-4 w-4 text-gray-500" />
                         <div>
-                          <div className="font-medium">{request.name}</div>
-                          <div className="text-xs text-gray-500">{request.email}</div>
+                          <div className="font-medium">{request.userId.name}</div>
+                          <div className="text-xs text-gray-500">{request.userId.email}</div>
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell>{request.licenseNumber}</TableCell>
                     <TableCell>{request.organization}</TableCell>
                     <TableCell>{request.city}</TableCell>
-                    <TableCell>{new Date(request.createdAt).toLocaleDateString()}</TableCell>
+                    <TableCell>{request.designation}</TableCell>
+                    <TableCell>{new Date(request.dateOfJoining).toLocaleDateString()}</TableCell>
                     <TableCell>{getStatusBadge(request.status)}</TableCell>
                     <TableCell className="text-right">
                       <DropdownMenu>
@@ -226,30 +415,20 @@ export default function IssuerRequestsPage() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => handleViewUser(request.userId)}>
+                          <DropdownMenuItem onClick={() => handleViewUser(request.userId._id)}>
                             <User className="mr-2 h-4 w-4" />
                             View Applicant
                           </DropdownMenuItem>
                           <DropdownMenuItem
-                            onClick={() => handleViewDocument("License Document", request.licenseDocumentUrl)}
+                            onClick={() => handleViewDocument("License Document", request.licenseUrl)}
                           >
                             <FileText className="mr-2 h-4 w-4" />
                             View License
                           </DropdownMenuItem>
-                          {request.certificatesUrl && (
-                            <DropdownMenuItem
-                              onClick={() => handleViewDocument("Certificates", request.certificatesUrl)}
-                            >
-                              <FileText className="mr-2 h-4 w-4" />
-                              View Certificates
-                            </DropdownMenuItem>
-                          )}
-                          {request.status === "Pending" && (
-                            <DropdownMenuItem onClick={() => handleOpenReviewDialog(request)}>
-                              <Eye className="mr-2 h-4 w-4" />
-                              Review Application
-                            </DropdownMenuItem>
-                          )}
+                          <DropdownMenuItem onClick={() => handleOpenReviewDialog(request)}>
+                            <Eye className="mr-2 h-4 w-4" />
+                            Review Application
+                          </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
@@ -278,15 +457,15 @@ export default function IssuerRequestsPage() {
                     <div className="flex items-center gap-2 mt-1">
                       <User className="h-5 w-5 text-gray-500" />
                       <div>
-                        <div className="font-medium">{selectedRequest.name}</div>
-                        <div className="text-sm text-gray-500">{selectedRequest.email}</div>
+                        <div className="font-medium">{selectedRequest.userId.name}</div>
+                        <div className="text-sm text-gray-500">{selectedRequest.userId.email}</div>
                       </div>
                     </div>
                   </div>
 
                   <div>
-                    <Label className="text-sm text-gray-500">License Number</Label>
-                    <div className="font-medium mt-1">{selectedRequest.licenseNumber}</div>
+                    <Label className="text-sm text-gray-500">ID Card Number</Label>
+                    <div className="font-medium mt-1">{selectedRequest.userId.idCardNumber || "N/A"}</div>
                   </div>
 
                   <div>
@@ -298,12 +477,10 @@ export default function IssuerRequestsPage() {
                   </div>
 
                   <div>
-                    <Label className="text-sm text-gray-500">Location</Label>
+                    <Label className="text-sm text-gray-500">City</Label>
                     <div className="flex items-center gap-2 mt-1">
                       <MapPin className="h-4 w-4 text-gray-500" />
-                      <div className="font-medium">
-                        {selectedRequest.city}, {selectedRequest.address}
-                      </div>
+                      <div className="font-medium">{selectedRequest.city}</div>
                     </div>
                   </div>
 
@@ -318,50 +495,36 @@ export default function IssuerRequestsPage() {
 
                 <div className="space-y-4">
                   <div>
-                    <Label className="text-sm text-gray-500">Experience</Label>
-                    <div className="p-3 bg-gray-50 rounded-md mt-1 text-sm">
-                      {selectedRequest.experience}
-                    </div>
+                    <Label className="text-sm text-gray-500">Designation</Label>
+                    <div className="font-medium mt-1">{selectedRequest.designation}</div>
                   </div>
 
                   <div>
-                    <Label className="text-sm text-gray-500">Documents</Label>
-                    <div className="space-y-2 mt-1">
+                    <Label className="text-sm text-gray-500">Date of Joining</Label>
+                    <div className="font-medium mt-1">{new Date(selectedRequest.dateOfJoining).toLocaleDateString()}</div>
+                  </div>
+
+                  <div>
+                    <Label className="text-sm text-gray-500">License Document</Label>
+                    <div className="mt-1">
                       <Button
                         variant="outline"
                         size="sm"
                         className="w-full justify-start"
-                        onClick={() => handleViewDocument("License Document", selectedRequest.licenseDocumentUrl)}
+                        onClick={() => handleViewDocument("License Document", selectedRequest.licenseUrl)}
                       >
                         <FileText className="mr-2 h-4 w-4" />
                         View License Document
                       </Button>
-
-                      {selectedRequest.certificatesUrl && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="w-full justify-start"
-                          onClick={() => handleViewDocument("Certificates", selectedRequest.certificatesUrl)}
-                        >
-                          <FileText className="mr-2 h-4 w-4" />
-                          View Certificates
-                        </Button>
-                      )}
-
-                      {selectedRequest.otherDocumentsUrl && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="w-full justify-start"
-                          onClick={() => handleViewDocument("Other Documents", selectedRequest.otherDocumentsUrl)}
-                        >
-                          <FileText className="mr-2 h-4 w-4" />
-                          View Other Documents
-                        </Button>
-                      )}
                     </div>
                   </div>
+
+                  {selectedRequest.remarks && (
+                    <div>
+                      <Label className="text-sm text-gray-500">Previous Remarks</Label>
+                      <div className="p-3 bg-gray-50 rounded-md mt-1 text-sm">{selectedRequest.remarks}</div>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -420,13 +583,31 @@ export default function IssuerRequestsPage() {
           </DialogHeader>
 
           <div className="flex-1 overflow-auto">
-            {previewDocument && (
-              <div className="bg-gray-100 rounded-md p-2 h-[500px] flex items-center justify-center">
-                <img
-                  src={previewDocument.url || "/placeholder.svg?height=500&width=700&text=Document+Preview"}
-                  alt={previewDocument.title}
-                  className="max-w-full max-h-full object-contain"
-                />
+            {isDocumentLoading ? (
+              <div className="flex items-center justify-center h-[500px]">
+                <Loader2 className="h-8 w-8 animate-spin text-gray-500" />
+                <span className="ml-2">Loading document...</span>
+              </div>
+            ) : previewDocument && documentType ? (
+              <div className="bg-gray-100 rounded-md p-2 h-[500px] flex items-center justify-center overflow-auto">
+                {documentType === "pdf" ? (
+                  <iframe
+                    src={`${previewDocument.url}#toolbar=0&navpanes=0&scrollbar=1`}
+                    title={previewDocument.title}
+                    className="w-full h-full border-none"
+                    style={{ overflow: "auto" }}
+                  />
+                ) : (
+                  <img
+                    src={previewDocument.url}
+                    alt={previewDocument.title}
+                    className="max-w-full max-h-full object-contain"
+                  />
+                )}
+              </div>
+            ) : (
+              <div className="flex items-center justify-center h-[500px] text-gray-500">
+                Unable to load document
               </div>
             )}
           </div>
@@ -439,3 +620,7 @@ export default function IssuerRequestsPage() {
     </div>
   )
 }
+
+
+
+//earlier it was static

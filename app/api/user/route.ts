@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { headers } from "next/headers";
-import {dbConnect} from "@/lib/db";
+import { dbConnect } from "@/lib/db";
 import User from "@/lib/models/user";
+import Affidavit from "@/lib/models/affidavit";
 import { verifyToken } from "@/lib/api/auth";
 
 export async function GET(request: Request) {
@@ -31,35 +32,50 @@ export async function GET(request: Request) {
     }
 
     // Fetch all users from MongoDB (excluding passwords)
-    const users = await User.find().select("name email roles idCardNumber area walletAddress").lean();
+    const users = await User.find().select("name email roles idCardNumber area walletAddress status remarks createdAt").lean();
+
+    // Fetch affidavit counts for each user
+    const usersWithAffidavits = await Promise.all(
+      users.map(async (user) => {
+        const affidavitsCount = await Affidavit.countDocuments({
+          $or: [
+            { issuerId: user._id },
+            { sellerId: user._id },
+            { buyerId: user._id },
+            { "witnesses.contactId": user._id },
+          ],
+        });
+        return {
+          ...user,
+          affidavitsCount,
+          createdAt: new Date(user.createdAt).toLocaleDateString(), // Format as date only
+        };
+      })
+    );
 
     // Always return the current user's details, regardless of role
     const userDetails = {
       _id: currentUser._id,
       idCardNumber: currentUser.idCardNumber,
       walletAddress: currentUser.walletAddress,
-      activeRole: currentUser.activeRole, // Include activeRole for debugging
+      activeRole: currentUser.activeRole,
     };
 
     // Filter issuers (users with "Issuer" role) to return in all cases
-    const issuers = users.filter((user) => user.roles.includes("Issuer"));
+    const issuers = usersWithAffidavits.filter((user) => user.roles.includes("Issuer"));
 
     // If the user is an Admin, return all users with additional data
     if (currentUser.activeRole === "Admin") {
-      const usersWithAffidavits = users.map((user) => ({
-        ...user,
-        affidavitsCount: 0, // Replace with actual logic if you have an affidavits collection
-      }));
       return NextResponse.json({
         success: true,
         users: usersWithAffidavits,
-        issuers, // Include issuers even for Admin
-        currentUser: userDetails, // Always include currentUser
+        issuers,
+        currentUser: userDetails,
       });
     }
 
     // For non-Admins, return a limited set of data
-    const limitedUsers = users.map((user) => ({
+    const limitedUsers = usersWithAffidavits.map((user) => ({
       _id: user._id,
       name: user.name,
       email: user.email,
@@ -67,11 +83,15 @@ export async function GET(request: Request) {
       idCardNumber: user.idCardNumber,
       area: user.area,
       walletAddress: user.walletAddress,
+      status: user.status,
+      remarks: user.remarks,
+      createdAt: user.createdAt,
+      affidavitsCount: user.affidavitsCount,
     }));
 
     return NextResponse.json({
       success: true,
-      issuers, // Always return issuers
+      issuers,
       users: limitedUsers,
       currentUser: userDetails,
     });
@@ -80,3 +100,5 @@ export async function GET(request: Request) {
     return NextResponse.json({ success: false, error: "Internal server error" }, { status: 500 });
   }
 }
+
+//earlier 82 lines

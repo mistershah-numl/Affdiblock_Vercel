@@ -24,13 +24,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 
 // Helper function for avatar URL (direct IPFS or placeholder)
 const getAvatarUrl = (path: string | null | undefined) => {
   if (!path || !path.startsWith("https://gateway.pinata.cloud/ipfs/")) {
     return "/placeholder.svg?height=128&width=128";
   }
-  return path; // Direct IPFS URL
+  return path;
 };
 
 export default function ProfilePage() {
@@ -45,6 +53,10 @@ export default function ProfilePage() {
     address: "",
     bio: "",
     activeRole: "",
+    organization: "",
+    city: "",
+    designation: "",
+    dateOfJoining: "",
   });
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
@@ -58,10 +70,21 @@ export default function ProfilePage() {
   const [passwordStrength, setPasswordStrength] = useState(0);
   const [passwordErrors, setPasswordErrors] = useState<string[]>([]);
 
+  const [isIssuerRequestDialogOpen, setIsIssuerRequestDialogOpen] = useState(false);
+  const [issuerRequestForm, setIssuerRequestForm] = useState({
+    licenseFile: null as File | null,
+    organization: "",
+    city: "",
+    designation: "",
+    dateOfJoining: "",
+  });
+  const licenseInputRef = useRef<HTMLInputElement>(null);
+
   // Memoize image URLs to prevent refetching on tab switch
   const avatarUrl = useMemo(() => getAvatarUrl(user?.avatar), [user?.avatar]);
   const idCardFrontUrl = useMemo(() => user?.idCardFrontUrl || "/placeholder.svg?height=128&width=128", [user?.idCardFrontUrl]);
   const idCardBackUrl = useMemo(() => user?.idCardBackUrl || "/placeholder.svg?height=128&width=128", [user?.idCardBackUrl]);
+  const licenseUrl = useMemo(() => user?.licenseUrl || "/placeholder.svg?height=128&width=128", [user?.licenseUrl]);
 
   // Debug image URLs
   useEffect(() => {
@@ -70,9 +93,10 @@ export default function ProfilePage() {
       avatarProcessed: avatarUrl,
       idCardFront: idCardFrontUrl,
       idCardBack: idCardBackUrl,
+      license: licenseUrl,
       timestamp: new Date().toISOString(),
     });
-  }, [avatarUrl, idCardFrontUrl, idCardBackUrl]);
+  }, [avatarUrl, idCardFrontUrl, idCardBackUrl, licenseUrl]);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -87,6 +111,10 @@ export default function ProfilePage() {
         address: user.address || "",
         bio: user.bio || "",
         activeRole: user.activeRole || "",
+        organization: user.organization || "",
+        city: user.city || "",
+        designation: user.designation || "",
+        dateOfJoining: user.dateOfJoining ? new Date(user.dateOfJoining).toISOString().split("T")[0] : "",
       });
       setAvatarPreview(user.avatar || null);
     }
@@ -128,6 +156,34 @@ export default function ProfilePage() {
     setFormData((prev) => ({ ...prev, activeRole: value }));
   };
 
+  const handleIssuerRequestInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setIssuerRequestForm((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleLicenseChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      if (file.size > 10 * 1024 * 1024) {
+        toast({
+          title: "Error",
+          description: "License file must be less than 10MB",
+          variant: "destructive",
+        });
+        return;
+      }
+      if (!file.type.match(/^(image\/|application\/pdf)/)) {
+        toast({
+          title: "Error",
+          description: "License must be an image or PDF file",
+          variant: "destructive",
+        });
+        return;
+      }
+      setIssuerRequestForm((prev) => ({ ...prev, licenseFile: file }));
+    }
+  };
+
   const handleSaveProfile = async () => {
     setIsProfileLoading(true);
     try {
@@ -143,6 +199,10 @@ export default function ProfilePage() {
           address: formData.address,
           bio: formData.bio,
           activeRole: formData.activeRole,
+          organization: formData.organization,
+          city: formData.city,
+          designation: formData.designation,
+          dateOfJoining: formData.dateOfJoining || undefined,
         }),
       });
       const data = await response.json();
@@ -229,7 +289,6 @@ export default function ProfilePage() {
         setAvatarFile(null);
         setAvatarPreview(null);
         setAvatarKey(Date.now());
-        // Force full page reload to fetch updated data
         window.location.reload();
       } else {
         toast({
@@ -316,6 +375,81 @@ export default function ProfilePage() {
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
+    }
+  };
+
+  const validateIssuerRequestForm = () => {
+    const errors: {
+      licenseFile?: string;
+      organization?: string;
+      city?: string;
+      designation?: string;
+      dateOfJoining?: string;
+    } = {};
+    if (!issuerRequestForm.licenseFile) errors.licenseFile = "License file is required";
+    if (!issuerRequestForm.organization) errors.organization = "Organization is required";
+    if (!issuerRequestForm.city) errors.city = "City is required";
+    if (!issuerRequestForm.designation) errors.designation = "Designation is required";
+    if (!issuerRequestForm.dateOfJoining) errors.dateOfJoining = "Date of joining is required";
+    return errors;
+  };
+
+  const handleSubmitIssuerRequest = async () => {
+    const errors = validateIssuerRequestForm();
+    if (Object.keys(errors).length > 0) {
+      toast({
+        title: "Error",
+        description: Object.values(errors)[0],
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsProfileLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append("license", issuerRequestForm.licenseFile!);
+      formData.append("organization", issuerRequestForm.organization);
+      formData.append("city", issuerRequestForm.city);
+      formData.append("designation", issuerRequestForm.designation);
+      formData.append("dateOfJoining", issuerRequestForm.dateOfJoining);
+
+      const response = await fetch("/api/issuer-requests", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
+      });
+      const data = await response.json();
+      if (data.success) {
+        toast({
+          title: "Success",
+          description: "Issuer role request submitted successfully",
+        });
+        setIsIssuerRequestDialogOpen(false);
+        setIssuerRequestForm({
+          licenseFile: null,
+          organization: "",
+          city: "",
+          designation: "",
+          dateOfJoining: "",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: data.error || "Failed to submit issuer request",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "An unexpected error occurred",
+        variant: "destructive",
+      });
+    } finally {
+      setIsProfileLoading(false);
     }
   };
 
@@ -504,6 +638,74 @@ export default function ProfilePage() {
                         rows={4}
                       />
                     </div>
+                    {user.roles.includes("Issuer") && (
+                      <>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="organization">Organization</Label>
+                            <Input
+                              id="organization"
+                              name="organization"
+                              value={formData.organization}
+                              onChange={handleInputChange}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="city">City</Label>
+                            <Input
+                              id="city"
+                              name="city"
+                              value={formData.city}
+                              onChange={handleInputChange}
+                            />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="designation">Designation</Label>
+                            <Input
+                              id="designation"
+                              name="designation"
+                              value={formData.designation}
+                              onChange={handleInputChange}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="dateOfJoining">Date of Joining</Label>
+                            <Input
+                              id="dateOfJoining"
+                              name="dateOfJoining"
+                              type="date"
+                              value={formData.dateOfJoining}
+                              onChange={handleInputChange}
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>License</Label>
+                          {licenseUrl !== "/placeholder.svg?height=128&width=128" ? (
+                            <div className="relative h-48 w-full">
+                              {licenseUrl.endsWith(".pdf") ? (
+                                <a href={licenseUrl} target="_blank" rel="noopener noreferrer" className="text-blue-500 underline">
+                                  View License (PDF)
+                                </a>
+                              ) : (
+                                <Image
+                                  src={licenseUrl}
+                                  alt="License"
+                                  fill
+                                  style={{ objectFit: "contain" }}
+                                  className="rounded-md"
+                                />
+                              )}
+                            </div>
+                          ) : (
+                            <p className="text-gray-500">No license uploaded</p>
+                          )}
+                          <p className="text-xs text-gray-500">License cannot be changed</p>
+                        </div>
+                      </>
+                    )}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label>ID Card Front</Label>
@@ -611,10 +813,11 @@ export default function ProfilePage() {
                       <div>
                         <h3 className="text-lg font-medium">Request Issuer Role</h3>
                         <p className="text-sm text-gray-500 mb-4">
-                          If you are a legal professional, you can request to become an issuer to create and manage
-                          affidavits
+                          If you are a legal professional, you can request to become an issuer to create and manage affidavits
                         </p>
-                        <Button variant="outline">Request Issuer Role</Button>
+                        <Button variant="outline" onClick={() => setIsIssuerRequestDialogOpen(true)}>
+                          Request Issuer Role
+                        </Button>
                       </div>
                     </>
                   )}
@@ -724,7 +927,97 @@ export default function ProfilePage() {
             </Card>
           </TabsContent>
         </Tabs>
+
+        <Dialog open={isIssuerRequestDialogOpen} onOpenChange={setIsIssuerRequestDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Request Issuer Role</DialogTitle>
+              <DialogDescription>
+                Submit your details and license to request the Issuer role.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="license">License Document</Label>
+                <input
+                  ref={licenseInputRef}
+                  type="file"
+                  id="license"
+                  accept="image/*,application/pdf"
+                  className="hidden"
+                  onChange={handleLicenseChange}
+                />
+                <Button
+                  variant="outline"
+                  className="flex items-center gap-2"
+                  onClick={() => licenseInputRef.current?.click()}
+                >
+                  <Upload className="h-4 w-4" />
+                  <span>{issuerRequestForm.licenseFile ? issuerRequestForm.licenseFile.name : "Upload License"}</span>
+                </Button>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="organization">Organization</Label>
+                  <Input
+                    id="organization"
+                    name="organization"
+                    value={issuerRequestForm.organization}
+                    onChange={handleIssuerRequestInputChange}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="city">City</Label>
+                  <Input
+                    id="city"
+                    name="city"
+                    value={issuerRequestForm.city}
+                    onChange={handleIssuerRequestInputChange}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="designation">Designation</Label>
+                  <Input
+                    id="designation"
+                    name="designation"
+                    value={issuerRequestForm.designation}
+                    onChange={handleIssuerRequestInputChange}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="dateOfJoining">Date of Joining</Label>
+                  <Input
+                    id="dateOfJoining"
+                    name="dateOfJoining"
+                    type="date"
+                    value={issuerRequestForm.dateOfJoining}
+                    onChange={handleIssuerRequestInputChange}
+                  />
+                </div>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsIssuerRequestDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleSubmitIssuerRequest} disabled={isProfileLoading}>
+                {isProfileLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Submitting...
+                  </>
+                ) : (
+                  "Submit Request"
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </ProtectedRoute>
   );
 }
+
+//earlier 730 lines

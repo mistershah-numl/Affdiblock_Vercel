@@ -19,9 +19,9 @@ import {
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Eye, MoreHorizontal, Search, UserPlus, Ban, Edit, User } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
-import { banUser, updateUser } from "@/lib/api/users"
 
 export default function UsersPage() {
   const router = useRouter()
@@ -34,7 +34,6 @@ export default function UsersPage() {
   const [isBanDialogOpen, setIsBanDialogOpen] = useState(false)
   const [selectedUser, setSelectedUser] = useState<any>(null)
   const [banReason, setBanReason] = useState("")
-  const [banDuration, setBanDuration] = useState("Permanent")
 
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [editUserData, setEditUserData] = useState<any>({})
@@ -60,12 +59,18 @@ export default function UsersPage() {
   // Search functionality
   useEffect(() => {
     if (searchQuery) {
-      const filtered = users.filter(
-        (user) =>
-          user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          user.activeRole.toLowerCase().includes(searchQuery.toLowerCase()),
-      )
+      const filtered = users.filter((user) => {
+        const query = searchQuery.toLowerCase();
+        return (
+          (user.name || "").toLowerCase().includes(query) ||
+          (user.email || "").toLowerCase().includes(query) ||
+          (user.roles || []).some((role: string) => role.toLowerCase().includes(query)) ||
+          (user.status || "").toLowerCase().includes(query) ||
+          String(user.affidavitsCount || 0).includes(query) ||
+          (user.createdAt || "").toLowerCase().includes(query) ||
+          (user.status === "Banned" && (user.remarks || "").toLowerCase().includes(query))
+        );
+      });
       setFilteredUsers(filtered)
     } else {
       setFilteredUsers(users)
@@ -86,7 +91,7 @@ export default function UsersPage() {
         setFilteredUsers(data.users)
       } else {
         console.error("Error fetching users:", data.error)
-        router.push("/dashboard") // Redirect if fetch fails (e.g., non-Admin access)
+        router.push("/dashboard")
       }
     } catch (error) {
       console.error("Error fetching users:", error)
@@ -103,7 +108,6 @@ export default function UsersPage() {
   const handleOpenBanDialog = (user: any) => {
     setSelectedUser(user)
     setBanReason("")
-    setBanDuration("Permanent")
     setIsBanDialogOpen(true)
   }
 
@@ -111,13 +115,27 @@ export default function UsersPage() {
     if (!selectedUser || !banReason) return
 
     try {
-      const response = await banUser(selectedUser._id, banReason, banDuration)
-      if (response.success) {
+      const response = await fetch("/api/user/admin-update", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          userId: selectedUser._id,
+          status: "Banned",
+          remarks: banReason,
+        }),
+      })
+      const data = await response.json()
+      if (data.success) {
         const updatedUsers = users.map((user) =>
-          user._id === selectedUser._id ? { ...user, status: "Banned", banReason, banDuration } : user,
+          user._id === selectedUser._id ? { ...user, status: "Banned", remarks: banReason } : user
         )
         setUsers(updatedUsers)
         setIsBanDialogOpen(false)
+      } else {
+        console.error("Error banning user:", data.error)
       }
     } catch (error) {
       console.error("Error banning user:", error)
@@ -129,8 +147,10 @@ export default function UsersPage() {
       _id: user._id,
       name: user.name,
       email: user.email,
-      role: user.activeRole,
+      roles: user.roles || [],
+      activeRole: user.activeRole,
       status: user.status,
+      remarks: user.remarks || "",
     })
     setIsEditDialogOpen(true)
   }
@@ -139,18 +159,61 @@ export default function UsersPage() {
     if (!editUserData._id) return
 
     try {
-      const response = await updateUser(editUserData._id, editUserData)
-      if (response.success) {
+      // Ensure 'User' role is included
+      const rolesToSend = editUserData.roles.length > 0 ? editUserData.roles : ["User"];
+      const response = await fetch("/api/user/admin-update", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          userId: editUserData._id,
+          name: editUserData.name,
+          email: editUserData.email,
+          roles: rolesToSend,
+          activeRole: editUserData.activeRole,
+          status: editUserData.status,
+          remarks: editUserData.status === "Banned" ? editUserData.remarks : undefined,
+        }),
+      })
+      const data = await response.json()
+      if (data.success) {
         const updatedUsers = users.map((user) =>
-          user._id === editUserData._id ? { ...user, ...editUserData, activeRole: editUserData.role } : user
+          user._id === editUserData._id
+            ? {
+                ...user,
+                name: editUserData.name,
+                email: editUserData.email,
+                roles: data.user.roles, // Use server-returned roles to ensure consistency
+                activeRole: data.user.activeRole,
+                status: editUserData.status,
+                remarks: editUserData.status === "Banned" ? editUserData.remarks : undefined,
+              }
+            : user
         )
         setUsers(updatedUsers)
         setIsEditDialogOpen(false)
+      } else {
+        console.error("Error updating user:", data.error)
       }
     } catch (error) {
       console.error("Error updating user:", error)
     }
   }
+
+  const handleRoleCheckboxChange = (role: string, checked: boolean) => {
+    setEditUserData((prev: any) => {
+      if (role === "User" && !checked) {
+        // Prevent unchecking the 'User' role
+        return prev;
+      }
+      const newRoles = checked
+        ? [...prev.roles, role]
+        : prev.roles.filter((r: string) => r !== role);
+      return { ...prev, roles: newRoles };
+    });
+  };
 
   const getUserStatusBadge = (status: string) => {
     switch (status) {
@@ -163,6 +226,18 @@ export default function UsersPage() {
       default:
         return <Badge variant="outline">{status}</Badge>
     }
+  }
+
+  const getRoleBadges = (roles: string[]) => {
+    return roles.map((role) => {
+      if (role === "Issuer") {
+        return <Badge key={role} className="bg-blue-500 ml-1">Issuer</Badge>
+      } else if (role === "Admin") {
+        return <Badge key={role} className="bg-purple-500 ml-1">Admin</Badge>
+      } else {
+        return <Badge key={role} variant="outline" className="ml-1">User</Badge>
+      }
+    });
   }
 
   // Show loading state while checking authentication
@@ -208,29 +283,30 @@ export default function UsersPage() {
           <CardTitle>Users</CardTitle>
           <CardDescription>A list of all users and issuers in the system.</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
                 <TableHead>Email</TableHead>
-                <TableHead>Role</TableHead>
+                <TableHead>Roles</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Affidavits</TableHead>
                 <TableHead>Created</TableHead>
+                <TableHead>Remarks</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8">
+                  <TableCell colSpan={8} className="text-center py-8">
                     Loading users...
                   </TableCell>
                 </TableRow>
               ) : filteredUsers.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8">
+                  <TableCell colSpan={8} className="text-center py-8">
                     <div className="flex flex-col items-center justify-center text-gray-500">
                       <User className="h-10 w-10 mb-2" />
                       <p>No users found matching your search criteria</p>
@@ -242,18 +318,11 @@ export default function UsersPage() {
                   <TableRow key={user._id}>
                     <TableCell className="font-medium">{user.name}</TableCell>
                     <TableCell>{user.email}</TableCell>
-                    <TableCell>
-                      {user.activeRole === "Issuer" ? (
-                        <Badge className="bg-blue-500">Issuer</Badge>
-                      ) : user.activeRole === "Admin" ? (
-                        <Badge className="bg-purple-500">Admin</Badge>
-                      ) : (
-                        <Badge variant="outline">User</Badge>
-                      )}
-                    </TableCell>
+                    <TableCell className="flex flex-wrap gap-1">{getRoleBadges(user.roles)}</TableCell>
                     <TableCell>{getUserStatusBadge(user.status)}</TableCell>
                     <TableCell>{user.affidavitsCount || 0}</TableCell>
-                    <TableCell>{new Date(user.createdAt).toLocaleDateString()}</TableCell>
+                    <TableCell>{user.createdAt}</TableCell>
+                    <TableCell>{user.status === "Banned" ? user.remarks || "N/A" : "-"}</TableCell>
                     <TableCell className="text-right">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -289,7 +358,7 @@ export default function UsersPage() {
 
       {/* Ban User Dialog */}
       <Dialog open={isBanDialogOpen} onOpenChange={setIsBanDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Ban User</DialogTitle>
             <DialogDescription>
@@ -308,21 +377,6 @@ export default function UsersPage() {
                 rows={3}
               />
             </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="banDuration">Ban Duration</Label>
-              <Select value={banDuration} onValueChange={setBanDuration}>
-                <SelectTrigger id="banDuration">
-                  <SelectValue placeholder="Select duration" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="7days">7 Days</SelectItem>
-                  <SelectItem value="30days">30 Days</SelectItem>
-                  <SelectItem value="90days">90 Days</SelectItem>
-                  <SelectItem value="Permanent">Permanent</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
           </div>
 
           <DialogFooter className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
@@ -338,7 +392,7 @@ export default function UsersPage() {
 
       {/* Edit User Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Edit User</DialogTitle>
             <DialogDescription>Update user information and status.</DialogDescription>
@@ -365,18 +419,42 @@ export default function UsersPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="editRole">Role</Label>
+              <Label>Roles</Label>
+              <div className="flex flex-col space-y-2">
+                {["User", "Issuer", "Admin"].map((role) => (
+                  <div key={role} className="flex items-center space-x-2">
+                    <Checkbox
+                      id={`role-${role}`}
+                      checked={editUserData.roles?.includes(role)}
+                      onCheckedChange={(checked) => handleRoleCheckboxChange(role, checked as boolean)}
+                      disabled={role === "User"} // Disable User checkbox to prevent unchecking
+                    />
+                    <label
+                      htmlFor={`role-${role}`}
+                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                    >
+                      {role}
+                    </label>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="editActiveRole">Active Role</Label>
               <Select
-                value={editUserData.role || ""}
-                onValueChange={(value) => setEditUserData({ ...editUserData, role: value })}
+                value={editUserData.activeRole || ""}
+                onValueChange={(value) => setEditUserData({ ...editUserData, activeRole: value })}
               >
-                <SelectTrigger id="editRole">
-                  <SelectValue placeholder="Select role" />
+                <SelectTrigger id="editActiveRole">
+                  <SelectValue placeholder="Select active role" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="User">User</SelectItem>
-                  <SelectItem value="Issuer">Issuer</SelectItem>
-                  <SelectItem value="Admin">Admin</SelectItem>
+                  {editUserData.roles?.map((role: string) => (
+                    <SelectItem key={role} value={role}>
+                      {role}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -397,6 +475,19 @@ export default function UsersPage() {
                 </SelectContent>
               </Select>
             </div>
+
+            {editUserData.status === "Banned" && (
+              <div className="space-y-2">
+                <Label htmlFor="editRemarks">Remarks</Label>
+                <Textarea
+                  id="editRemarks"
+                  value={editUserData.remarks || ""}
+                  onChange={(e) => setEditUserData({ ...editUserData, remarks: e.target.value })}
+                  placeholder="Provide remarks for banned user..."
+                  rows={3}
+                />
+              </div>
+            )}
           </div>
 
           <DialogFooter className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
@@ -410,3 +501,6 @@ export default function UsersPage() {
     </div>
   )
 }
+
+
+//earlier 496 something lines
