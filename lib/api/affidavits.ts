@@ -1,4 +1,6 @@
 import type { Affidavit } from "@/lib/models/affidavit"
+import AffidavitModel from "@/lib/models/affidavit"
+import mongoose from "mongoose";
 import { issueAffidavit, verifyAffidavit } from "@/lib/blockchain"
 import { ethers, JsonRpcProvider } from "ethers";
 
@@ -103,25 +105,29 @@ export async function rejectAffidavit(affidavitId: string, reason: string) {
 }
 
 // Revoke an affidavit (for issuers and admins)
-export async function revokeAffidavit(affidavitId: string) {
+export async function revokeAffidavit(affidavitId: string, reason?: string, revokedBy?: string) {
   try {
-    // In a real app, this would update the affidavit in MongoDB
-    // and then revoke it on the blockchain
+    const updated = await AffidavitModel.findByIdAndUpdate(
+      affidavitId,
+      {
+        status: "Revoked",
+        revokeReason: reason || null,
+        revokedAt: new Date(),
+        revokedBy: revokedBy ? new mongoose.Types.ObjectId(revokedBy) : undefined
+      },
+      { new: true }
+    );
 
-    // Mock successful revocation
-    console.log(`Affidavit ${affidavitId} revoked`)
-
-    return {
-      success: true,
-      transactionHash: `0x${Math.random().toString(16).substr(2, 64)}`,
-      blockNumber: Math.floor(Math.random() * 10000000),
-      timestamp: new Date().toISOString(),
+    if (!updated) {
+      throw new Error("Affidavit not found");
     }
+
+    return { success: true, affidavit: updated };
   } catch (error) {
     console.error("Failed to revoke affidavit:", error)
     return {
       success: false,
-      error: "Failed to revoke affidavit on the blockchain",
+      error: "Failed to revoke affidavit",
     }
   }
 }
@@ -285,71 +291,22 @@ export async function getIssuerAffidavits(issuerId: string) {
 }
 
 // Get issued affidavits (for issuers)
-export async function getIssuedAffidavits() {
+export async function getIssuedAffidavits(issuerId: string) {
   try {
-    // In a real app, this would query MongoDB for affidavits issued by the current user
-    // For demo purposes, we'll just return mock data
+    const affidavits = await AffidavitModel.find({ 
+      issuerId, 
+      status: { $regex: '^Accepted$', $options: 'i' } 
+    })
+      .populate('createdBy', 'name')
+      .sort({ dateIssued: -1 })
+      .lean();
 
-    const affidavits = [
-      {
-        _id: "aff_123456789",
-        title: "Property Transfer Deed",
-        category: "Property",
-        requesterName: "John Doe",
-        requesterEmail: "john.doe@example.com",
-        dateRequested: new Date(Date.now() - 86400000), // Yesterday
-        dateIssued: new Date(Date.now() - 43200000), // 12 hours ago
-        status: "Active",
-        blockchainTxId: "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
-      },
-      {
-        _id: "aff_987654321",
-        title: "Vehicle Ownership Transfer",
-        category: "Vehicle",
-        requesterName: "Jane Smith",
-        requesterEmail: "jane.smith@example.com",
-        dateRequested: new Date(Date.now() - 172800000), // 2 days ago
-        dateIssued: new Date(Date.now() - 129600000), // 1.5 days ago
-        status: "Active",
-        blockchainTxId: "0x9876543210fedcba9876543210fedcba9876543210fedcba9876543210fedcba",
-      },
-      {
-        _id: "aff_111222333",
-        title: "Business Partnership Agreement",
-        category: "Business",
-        requesterName: "Robert Johnson",
-        requesterEmail: "robert.johnson@example.com",
-        dateRequested: new Date(Date.now() - 259200000), // 3 days ago
-        dateIssued: new Date(Date.now() - 216000000), // 2.5 days ago
-        status: "Revoked",
-        blockchainTxId: "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
-        revocationReason: "Parties requested cancellation",
-      },
-      {
-        _id: "aff_444555666",
-        title: "Rental Agreement",
-        category: "Property",
-        requesterName: "Emily Wilson",
-        requesterEmail: "emily.wilson@example.com",
-        dateRequested: new Date(Date.now() - 345600000), // 4 days ago
-        dateIssued: new Date(Date.now() - 302400000), // 3.5 days ago
-        status: "Active",
-        blockchainTxId: "0xfedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321",
-      },
-      {
-        _id: "aff_777888999",
-        title: "Employment Contract",
-        category: "Employment",
-        requesterName: "Michael Brown",
-        requesterEmail: "michael.brown@example.com",
-        dateRequested: new Date(Date.now() - 432000000), // 5 days ago
-        dateIssued: null,
-        status: "Pending",
-        blockchainTxId: null,
-      },
-    ]
+    const mappedAffidavits = affidavits.map((aff) => ({
+      ...aff,
+      requesterName: aff.createdBy?.name || "Unknown"
+    }));
 
-    return { success: true, affidavits }
+    return { success: true, affidavits: mappedAffidavits };
   } catch (error) {
     console.error("Get issued affidavits error:", error)
     return { success: false, error: "Failed to get issued affidavits" }
@@ -377,3 +334,8 @@ export async function markWitnessAsFake(witnessId: string, affidavitId: string, 
     return { success: false, error: "Failed to mark witness as fake" }
   }
 }
+
+
+
+
+//earlier 384 lines of code

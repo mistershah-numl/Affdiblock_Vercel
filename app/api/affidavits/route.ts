@@ -1,9 +1,10 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
+import Affidavit from "@/lib/models/affidavit"
 import { createAffidavitRequest, getUserAffidavits } from "@/lib/api/affidavits"
 import { verifyToken } from "@/lib/api/auth"
 
 // Create a new affidavit request
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     // Verify authentication
     const authHeader = request.headers.get("Authorization");
@@ -52,7 +53,7 @@ export async function POST(request: Request) {
 }
 
 // Get affidavits for the authenticated user
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
     // Verify authentication
     const authHeader = request.headers.get("Authorization");
@@ -67,17 +68,42 @@ export async function GET(request: Request) {
       return NextResponse.json({ success: false, error: "Invalid token" }, { status: 401 });
     }
 
-    // Fetch affidavits for the user
     const userId = tokenResult.decoded.id;
-    const result = await getUserAffidavits(userId);
+    const { searchParams } = new URL(request.url);
 
-    if (result.success) {
-      return NextResponse.json(result);
+    if (searchParams.get('type') === 'issued') {
+      // Fetch all issued affidavits for issuer (any status)
+      const affidavits = await Affidavit.find({ 
+        issuerId: userId 
+      })
+        .populate({
+          path: 'createdBy',
+          select: 'name'
+        })
+        .sort({ dateIssued: -1 })
+        .lean();
+
+      const mappedAffidavits = affidavits.map((aff) => ({
+        ...aff,
+        requesterName: aff.createdBy?.name || "Unknown"
+      }));
+
+      return NextResponse.json({ success: true, affidavits: mappedAffidavits });
     } else {
-      return NextResponse.json({ success: false, error: result.error }, { status: 400 });
+      // Existing logic: Fetch affidavits for the user (non-issued)
+      const result = await getUserAffidavits(userId);
+
+      if (result.success) {
+        return NextResponse.json(result);
+      } else {
+        return NextResponse.json({ success: false, error: result.error }, { status: 400 });
+      }
     }
   } catch (error) {
     console.error("Get affidavits error:", error);
     return NextResponse.json({ success: false, error: "Internal server error" }, { status: 500 });
   }
 }
+
+
+//earlier 83 lines and working 

@@ -42,6 +42,10 @@ export interface IAffidavit extends Document {
   dataHash?: string;
   isVerifiedOnBlockchain?: boolean;
   lastVerifiedAt?: Date;
+  revokeReason?: string;
+  revokedAt?: Date;
+  revokedBy?: mongoose.Types.ObjectId;
+  basisDisplayId?: string;
 }
 
 const affidavitSchema: Schema<IAffidavit> = new Schema(
@@ -95,6 +99,10 @@ const affidavitSchema: Schema<IAffidavit> = new Schema(
     dataHash: { type: String, required: false },
     isVerifiedOnBlockchain: { type: Boolean, default: false },
     lastVerifiedAt: { type: Date, required: false },
+    revokeReason: { type: String, required: false },
+    revokedAt: { type: Date, required: false },
+    revokedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: false },
+    basisDisplayId: { type: String, required: false },
   },
   { timestamps: true }
 );
@@ -124,3 +132,6 @@ const Affidavit: Model<IAffidavit> & { generateDisplayId: () => Promise<string> 
   );
 
 export default Affidavit;
+
+
+//earlier 126 lines and working then 132 workin ,  now 134 with change , added basis display id , 

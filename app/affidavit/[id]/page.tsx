@@ -81,15 +81,15 @@ interface Affidavit {
   category: string
   description: string
   declaration: string
-  issuerId: { _id: string; name: string; idCardNumber: string; walletAddress?: string; area?: string }
+  issuerId: string
   issuerName: string
   issuerIdCardNumber: string
   issuerWalletAddress: string
-  sellerId?: { _id: string; name: string; idCardNumber: string; walletAddress?: string }
+  sellerId?: string
   sellerName?: string
   sellerIdCardNumber?: string
   sellerWalletAddress?: string
-  buyerId?: { _id: string; name: string; idCardNumber: string; walletAddress?: string }
+  buyerId?: string
   buyerName?: string
   buyerIdCardNumber?: string
   buyerWalletAddress?: string
@@ -108,6 +108,10 @@ interface Affidavit {
   requestId: string
   createdBy: { _id: string; name: string; idCardNumber: string }
   details?: Record<string, string | number>
+  revokeReason?: string
+  basisDisplayId?: string
+  revokedAt?: string
+  revokedBy?: { _id: string; name: string; idCardNumber: string } | string
 }
 
 export default function AffidavitDetailPage() {
@@ -134,6 +138,45 @@ export default function AffidavitDetailPage() {
     fetchAffidavit()
   }, [displayId])
 
+  const enrichRevokedBy = async (affidavitData: any) => {
+    if (affidavitData.revokedBy && typeof affidavitData.revokedBy === 'string') {
+      const revokedByResponse = await fetch("/api/public/user-idcard", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userIds: [affidavitData.revokedBy] }),
+      })
+      let fetchSuccess = false
+      if (revokedByResponse.ok) {
+        const revokedByData = await revokedByResponse.json()
+        if (revokedByData.success && revokedByData.data[affidavitData.revokedBy]) {
+          affidavitData.revokedBy = {
+            _id: affidavitData.revokedBy,
+            name: revokedByData.data[affidavitData.revokedBy].name,
+            idCardNumber: revokedByData.data[affidavitData.revokedBy].idCardNumber
+          }
+          fetchSuccess = true
+        }
+      }
+      if (!fetchSuccess) {
+        // Fallback: check if revokedBy matches issuerId
+        if (affidavitData.revokedBy === affidavitData.issuerId) {
+          affidavitData.revokedBy = {
+            _id: affidavitData.revokedBy,
+            name: affidavitData.issuerName,
+            idCardNumber: affidavitData.issuerIdCardNumber
+          }
+        } else {
+          affidavitData.revokedBy = {
+            _id: affidavitData.revokedBy,
+            name: "Unknown User",
+            idCardNumber: "N/A"
+          }
+        }
+      }
+    }
+    return affidavitData
+  }
+
   const fetchAffidavit = async () => {
     try {
       setIsLoading(true)
@@ -144,7 +187,8 @@ export default function AffidavitDetailPage() {
       const data = await response.json()
 
       if (data.success) {
-        setAffidavit(data.affidavit)
+        let affidavitData = await enrichRevokedBy(data.affidavit)
+        setAffidavit(affidavitData)
         await verifyOnBlockchain()
       } else {
         throw new Error(data.error || "Failed to fetch affidavit")
@@ -173,7 +217,7 @@ export default function AffidavitDetailPage() {
       if (!data.success || !data.affidavit) {
         throw new Error(data.error || "Failed to fetch affidavit")
       }
-      const affidavitData = data.affidavit
+      let affidavitData = await enrichRevokedBy(data.affidavit)
       setAffidavit(affidavitData)
 
       if (!affidavitData?._id) {
@@ -347,10 +391,25 @@ export default function AffidavitDetailPage() {
       { label: "Category", value: affidavit.category },
       { label: "Date Issued", value: new Date(affidavit.dateIssued).toLocaleDateString() },
       { label: "Date Requested", value: new Date(affidavit.dateRequested).toLocaleDateString() },
-      { label: "Status", value: affidavit.isVerifiedOnBlockchain ? "Verified" : "Non-Verified" },
+      { label: "Status", value: affidavit.status },
       { label: "Created By", value: affidavit.createdBy?.name || "N/A" },
-      { label: "Request ID", value: affidavit.requestId || "N/A" },
     ]
+
+    if (affidavit.revokeReason) {
+      details.push({ label: "Revocation Reason", value: affidavit.revokeReason })
+    }
+    if (affidavit.basisDisplayId) {
+      details.push({ label: "Revoked on Basis", value: affidavit.basisDisplayId })
+    }
+    if (affidavit.revokedAt) {
+      details.push({ label: "Revoked At", value: new Date(affidavit.revokedAt).toLocaleDateString() })
+    }
+    if (affidavit.revokedBy) {
+      const revokedByDisplay = typeof affidavit.revokedBy === 'string' 
+        ? `ID: ${affidavit.revokedBy}` 
+        : `${affidavit.revokedBy.name} (ID: ${affidavit.revokedBy.idCardNumber})`
+      details.push({ label: "Revoked By", value: revokedByDisplay })
+    }
 
     if (affidavit.details) {
       Object.entries(affidavit.details).forEach(([key, value]) => {
@@ -474,6 +533,27 @@ export default function AffidavitDetailPage() {
       toast({
         title: "Error",
         description: error instanceof Error ? error.message : "Failed to fetch user profile",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const handleViewBasisAffidavit = async (basisDisplayId: string) => {
+    try {
+      const response = await fetch(`/api/affidavits/get?id=${basisDisplayId}`)
+      if (!response.ok) {
+        throw new Error(`Failed to fetch basis affidavit: ${response.statusText}`)
+      }
+      const data = await response.json()
+      if (data.success && data.affidavit) {
+        router.push(`/affidavit/${basisDisplayId}`)
+      } else {
+        throw new Error("Basis affidavit not found")
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to fetch basis affidavit",
         variant: "destructive",
       })
     }
@@ -613,6 +693,49 @@ export default function AffidavitDetailPage() {
       return (
         <div className="flex items-center gap-2 p-3 bg-gray-50 border border-gray-200 rounded-lg mb-4">
           <span className="text-gray-600">Verification pending...</span>
+        </div>
+      )
+    }
+
+    if (affidavit?.status.toLowerCase() === "revoked") {
+      return (
+        <div className="space-y-3 mb-4">
+          <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+            <AlertTriangle className="text-red-600" size={20} />
+            <span className="text-red-800 font-medium">⚠️ AFFIDAVIT REVOKED</span>
+          </div>
+          <div className="bg-red-50 p-4 rounded-lg border border-red-200">
+            <h3 className="font-semibold text-red-800 mb-2">Revocation Details</h3>
+            <div className="text-sm text-red-700 space-y-1">
+              {affidavit.revokeReason && (
+                <p>
+                  <span className="font-medium">Reason:</span> {affidavit.revokeReason}
+                </p>
+              )}
+              {affidavit.basisDisplayId && (
+                <p>
+                  <span className="font-medium">Revoked on Basis:</span>{" "}
+                  <span
+                    className="cursor-pointer text-blue-600 hover:underline"
+                    onClick={() => handleViewBasisAffidavit(affidavit.basisDisplayId!)}
+                  >
+                    {affidavit.basisDisplayId}
+                  </span>
+                </p>
+              )}
+              {affidavit.revokedAt && (
+                <p>
+                  <span className="font-medium">Revoked At:</span>{" "}
+                  {new Date(affidavit.revokedAt).toLocaleDateString()}
+                </p>
+              )}
+              {affidavit.revokedBy && (
+                <p>
+                  <span className="font-medium">Revoked By:</span> {typeof affidavit.revokedBy === 'string' ? `ID: ${affidavit.revokedBy}` : `${affidavit.revokedBy.name} (ID: ${affidavit.revokedBy.idCardNumber})`}
+                </p>
+              )}
+            </div>
+          </div>
         </div>
       )
     }
@@ -779,7 +902,7 @@ export default function AffidavitDetailPage() {
                       },
                       {
                         label: "Status",
-                        value: affidavit.isVerifiedOnBlockchain ? "Verified" : "Non-Verified",
+                        value: affidavit.status,
                       },
                       {
                         label: "Created By",
@@ -827,7 +950,7 @@ export default function AffidavitDetailPage() {
                           </Badge>
                           <h3
                             className="font-semibold cursor-pointer hover:text-blue-600 transition-colors"
-                            onClick={() => handleViewProfile(affidavit.issuerId?.idCardNumber || "")}
+                            onClick={() => handleViewProfile(affidavit.issuerIdCardNumber || "")}
                           >
                             {affidavit.issuerName || "N/A"}
                           </h3>
@@ -1198,6 +1321,4 @@ export default function AffidavitDetailPage() {
   )
 }
 
-
-
-//earlier 1211 
+//workin and showing revoked by etc as expected , if affdiavit is revoked
