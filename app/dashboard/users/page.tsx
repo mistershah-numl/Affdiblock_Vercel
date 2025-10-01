@@ -20,7 +20,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Eye, MoreHorizontal, Search, UserPlus, Ban, Edit, User } from "lucide-react"
+import { Eye, MoreHorizontal, Search, UserPlus, Ban, Edit, User, Users, Shield, UserCheck, AlertTriangle } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 
 export default function UsersPage() {
@@ -100,6 +100,43 @@ export default function UsersPage() {
       setIsLoading(false)
     }
   }
+
+  // Calculate stats dynamically
+  const totalUsers = users.length
+  const issuersCount = users.filter((u) => u.roles.includes("Issuer")).length
+  const adminsCount = users.filter((u) => u.roles.includes("Admin")).length
+  const bannedUsers = users.filter((u) => u.status === "Banned").length
+
+  const stats = [
+    {
+      title: "Total Users",
+      value: totalUsers.toString(),
+      icon: <Users className="h-5 w-5 text-blue-500" />,
+      change: "+12 from last month",
+      trend: "up",
+    },
+    {
+      title: "Issuers",
+      value: issuersCount.toString(),
+      icon: <UserCheck className="h-5 w-5 text-green-500" />,
+      change: "+3 from last month",
+      trend: "up",
+    },
+    {
+      title: "Admins",
+      value: adminsCount.toString(),
+      icon: <Shield className="h-5 w-5 text-purple-500" />,
+      change: "Same as last month",
+      trend: "neutral",
+    },
+    {
+      title: "Banned Users",
+      value: bannedUsers.toString(),
+      icon: <Ban className="h-5 w-5 text-red-500" />,
+      change: "+2 from last month",
+      trend: "up",
+    },
+  ]
 
   const handleViewUser = (userId: string) => {
     router.push(`/dashboard/users/${userId}`)
@@ -275,6 +312,32 @@ export default function UsersPage() {
             Create User
           </Button>
         </div>
+      </div>
+
+      {/* Stats Section */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {stats.map((stat, index) => (
+          <Card key={index}>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium">{stat.title}</CardTitle>
+              {stat.icon}
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stat.value}</div>
+              <p
+                className={`text-xs ${
+                  stat.trend === "up"
+                    ? "text-green-500"
+                    : stat.trend === "down"
+                    ? "text-red-500"
+                    : "text-gray-500"
+                }`}
+              >
+                {stat.change}
+              </p>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
       {/* Users Table Section */}
@@ -502,5 +565,4 @@ export default function UsersPage() {
   )
 }
 
-
-//earlier 496 something lines
+//earlier 503 withou cards  lines
