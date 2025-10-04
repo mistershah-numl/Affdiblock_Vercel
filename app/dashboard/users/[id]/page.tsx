@@ -525,21 +525,21 @@ export default function UserDetailsPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <p className="text-sm text-gray-500 mb-2">ID Card (Front)</p>
-                  <div className="border rounded-md overflow-hidden">
+                  <div className="border rounded-md overflow-hidden bg-gray-50 flex items-center justify-center" style={{ height: '240px' }}>
                     <img
-                      src={user.idCardFrontUrl || "/placeholder.svg?height=200&width=320&text=ID+Card+Front"}
+                      src={user.idCardFrontUrl || "/placeholder.svg?height=240&width=380&text=ID+Card+Front"}
                       alt="ID Card Front"
-                      className="w-full h-auto"
+                      className="w-full h-full object-contain"
                     />
                   </div>
                 </div>
                 <div>
                   <p className="text-sm text-gray-500 mb-2">ID Card (Back)</p>
-                  <div className="border rounded-md overflow-hidden">
+                  <div className="border rounded-md overflow-hidden bg-gray-50 flex items-center justify-center" style={{ height: '240px' }}>
                     <img
-                      src={user.idCardBackUrl || "/placeholder.svg?height=200&width=320&text=ID+Card+Back"}
+                      src={user.idCardBackUrl || "/placeholder.svg?height=240&width=380&text=ID+Card+Back"}
                       alt="ID Card Back"
-                      className="w-full h-auto"
+                      className="w-full h-full object-contain"
                     />
                   </div>
                 </div>
@@ -551,7 +551,7 @@ export default function UserDetailsPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      className="w-full justify-start mb-2"
+                      className="w-full justify-start"
                       onClick={() => handleViewDocument("License Document", user.licenseUrl)}
                     >
                       <FileText className="mr-2 h-4 w-4" />
@@ -753,42 +753,44 @@ export default function UserDetailsPage() {
 
         {/* Document Preview Dialog */}
         <Dialog open={isDocumentPreviewOpen} onOpenChange={setIsDocumentPreviewOpen}>
-          <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col">
+          <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
             <DialogHeader>
               <DialogTitle>{previewDocument?.title}</DialogTitle>
             </DialogHeader>
 
             <div className="flex-1 overflow-auto">
               {isDocumentLoading ? (
-                <div className="flex items-center justify-center h-[500px]">
+                <div className="flex items-center justify-center h-[600px]">
                   <Loader2 className="h-8 w-8 animate-spin text-gray-500" />
                   <span className="ml-2">Loading document...</span>
                 </div>
               ) : previewDocument && documentType ? (
-                <div className="bg-gray-100 rounded-md p-2 h-[500px] flex items-center justify-center overflow-auto">
+                <div className="bg-gray-100 rounded-md p-4 flex items-center justify-center" style={{ minHeight: '600px' }}>
                   {documentType === "pdf" ? (
                     <iframe
                       src={`${previewDocument.url}#toolbar=0&navpanes=0&scrollbar=1`}
                       title={previewDocument.title}
-                      className="w-full h-full border-none"
-                      style={{ overflow: "auto" }}
+                      className="w-full border-none rounded"
+                      style={{ height: '600px' }}
                     />
                   ) : (
-                    <img
-                      src={previewDocument.url}
-                      alt={previewDocument.title}
-                      className="max-w-full max-h-full object-contain"
-                    />
+                    <div className="w-full flex items-center justify-center" style={{ height: '600px' }}>
+                      <img
+                        src={previewDocument.url}
+                        alt={previewDocument.title}
+                        className="max-w-full max-h-full object-contain"
+                      />
+                    </div>
                   )}
                 </div>
               ) : (
-                <div className="flex items-center justify-center h-[500px] text-gray-500">
+                <div className="flex items-center justify-center h-[600px] text-gray-500">
                   Unable to load document
                 </div>
               )}
             </div>
 
-            <DialogFooter className="flex justify-end">
+            <DialogFooter className="flex justify-end mt-4">
               <Button onClick={() => setIsDocumentPreviewOpen(false)}>Close</Button>
             </DialogFooter>
           </DialogContent>
@@ -881,4 +883,4 @@ function AffidavitsTable({
   )
 }
 
-//earlier 809 and not showing pdf , only show imag lisence 
+//earlier 882 and showing pdf etc well but loads after cliking , images with standard dimensions 
