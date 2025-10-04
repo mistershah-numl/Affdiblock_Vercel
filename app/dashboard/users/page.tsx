@@ -67,8 +67,7 @@ export default function UsersPage() {
           (user.roles || []).some((role: string) => role.toLowerCase().includes(query)) ||
           (user.status || "").toLowerCase().includes(query) ||
           String(user.affidavitsCount || 0).includes(query) ||
-          (user.createdAt || "").toLowerCase().includes(query) ||
-          (user.status === "Banned" && (user.remarks || "").toLowerCase().includes(query))
+          (user.createdAt || "").toLowerCase().includes(query)
         );
       });
       setFilteredUsers(filtered)
@@ -356,20 +355,19 @@ export default function UsersPage() {
                 <TableHead>Status</TableHead>
                 <TableHead>Affidavits</TableHead>
                 <TableHead>Created</TableHead>
-                <TableHead>Remarks</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8">
+                  <TableCell colSpan={7} className="text-center py-8">
                     Loading users...
                   </TableCell>
                 </TableRow>
               ) : filteredUsers.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8">
+                  <TableCell colSpan={7} className="text-center py-8">
                     <div className="flex flex-col items-center justify-center text-gray-500">
                       <User className="h-10 w-10 mb-2" />
                       <p>No users found matching your search criteria</p>
@@ -385,7 +383,6 @@ export default function UsersPage() {
                     <TableCell>{getUserStatusBadge(user.status)}</TableCell>
                     <TableCell>{user.affidavitsCount || 0}</TableCell>
                     <TableCell>{user.createdAt}</TableCell>
-                    <TableCell>{user.status === "Banned" ? user.remarks || "N/A" : "-"}</TableCell>
                     <TableCell className="text-right">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -564,5 +561,4 @@ export default function UsersPage() {
     </div>
   )
 }
-
 //earlier 503 withou cards  lines

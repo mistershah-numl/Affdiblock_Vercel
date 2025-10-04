@@ -3,12 +3,35 @@
 import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Eye, EyeOff, Lock, Mail, AlertCircle } from "lucide-react";
+import {
+  Eye,
+  EyeOff,
+  Lock,
+  Mail,
+  AlertCircle,
+  X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogClose,
+} from "@/components/ui/dialog";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useAuth } from "@/lib/auth-context";
 import { toast } from "@/components/ui/use-toast";
@@ -21,6 +44,7 @@ function LoginForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showBanDialog, setShowBanDialog] = useState(false);
   const searchParams = useSearchParams(); // Moved inside the component
 
   useEffect(() => {
@@ -45,12 +69,16 @@ function LoginForm() {
       console.log("Redirecting to /dashboard");
     } else {
       const errorMessage = result.error || "An unexpected error occurred";
-      setError(errorMessage);
-      toast({
-        title: "Login Failed",
-        description: errorMessage,
-        variant: "destructive",
-      });
+      if (errorMessage.includes("banned")) {
+        setShowBanDialog(true);
+      } else {
+        setError(errorMessage);
+        toast({
+          title: "Login Failed",
+          description: errorMessage,
+          variant: "destructive",
+        });
+      }
     }
     setIsLoading(false);
   };
@@ -157,6 +185,25 @@ function LoginForm() {
           </CardFooter>
         </Card>
       </div>
+
+      {/* Ban Dialog */}
+      <Dialog open={showBanDialog} onOpenChange={setShowBanDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Account Banned</DialogTitle>
+            <DialogDescription>
+              You have been banned from the system for violating our rules. Please contact Support at Contactus@AffidBlock.com.pk for assistance.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button type="button" variant="outline">
+                Close
+              </Button>
+            </DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -168,3 +215,6 @@ export default function LoginPage() {
     </Suspense>
   );
 }
+
+
+//earlier 170 working without banned filter

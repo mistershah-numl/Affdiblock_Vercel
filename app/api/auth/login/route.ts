@@ -24,6 +24,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "Invalid credentials" }, { status: 401 })
     }
 
+    if (user.status === "Banned") {
+      return NextResponse.json({ success: false, error: "Your account has been banned. Please contact support at Contactus@AffidBlock.com.pk" }, { status: 403 })
+    }
+
     const token = jwt.sign(
       {
         id: user._id,
@@ -70,3 +74,5 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: false, error: "Internal server error" }, { status: 500 })
   }
 }
+
+// earlier 72 lines without banned filter

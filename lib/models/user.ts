@@ -29,6 +29,7 @@ interface IUser extends Document {
   city?: string;
   designation?: string;
   dateOfJoining?: Date;
+  added_by?: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
   comparePassword: (candidatePassword: string) => Promise<boolean>;
@@ -61,6 +62,7 @@ const userSchema: Schema<IUser> = new Schema(
     city: { type: String },
     designation: { type: String },
     dateOfJoining: { type: Date },
+    added_by: { type: Schema.Types.ObjectId, ref: 'User' },
   },
   { timestamps: true }
 );
@@ -106,4 +108,4 @@ const User: Model<IUser> = mongoose.models.User || mongoose.model<IUser>("User",
 
 export default User;
 
-//earlier 89 lines
+//earlier 109 lines working , without addedby then 109 with addedby
