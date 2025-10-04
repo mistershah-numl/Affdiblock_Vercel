@@ -35,8 +35,20 @@ export async function getAllUsers() {
 // Get user by ID
 export async function getUserById(userId: string) {
   try {
-    // Assuming real implementation elsewhere; cleared static data
-    return { success: true, user: {} };
+    const res = await fetch(`/api/user/${userId}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`, // Assume token in localStorage; adjust if needed
+      },
+    });
+
+    const data = await res.json();
+
+    if (res.ok && data.success) {
+      return { success: true, user: data.user };
+    } else {
+      return { success: false, error: data.error || 'Failed to get user' };
+    }
   } catch (error) {
     console.error("Get user error:", error);
     return { success: false, error: "Failed to get user" };
@@ -126,8 +138,8 @@ export async function rejectIssuerRequest(requestId: string, adminId: string, re
     console.error("Reject issuer request error:", error);
     return { success: false, error: "Failed to reject issuer request" };
   }
-} 
+}
 
 
 
-// 220 lines of code earlier , now  129 with admin-create
+// 129 lines of code earlier with admincreate now 141 with admin fetch user details 
