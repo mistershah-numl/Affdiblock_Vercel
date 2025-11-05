@@ -71,11 +71,11 @@ export function AppSidebar() {
         label: "Settings",
         href: "/dashboard/settings",
       },
-      {
-        icon: <AlertCircle className="h-5 w-5" />,
-        label: "Support",
-        href: "/dashboard/support",
-      },
+      // {
+      //   icon: <AlertCircle className="h-5 w-5" />,
+      //   label: "Support",
+      //   href: "/dashboard/support",
+      // },
     ]
 
     const userItems = [
