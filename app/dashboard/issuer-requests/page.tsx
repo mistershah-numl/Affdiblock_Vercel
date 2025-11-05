@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect } from "react"
@@ -322,6 +321,52 @@ export default function IssuerRequestsPage() {
     }
   }
 
+  const handleDeleteRequest = async (requestId: string) => {
+    console.log("🗑️ Initiating delete request:", requestId)
+    try {
+      const response = await fetch("/api/issuer-requests/delete", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ requestId }),
+      })
+      const data = await response.json()
+      console.log("📡 Delete response:", {
+        status: response.status,
+        success: data.success,
+        error: data.error
+      })
+
+      if (data.success) {
+        toast({
+          title: "Success",
+          description: "Issuer request deleted",
+          variant: "default",
+        })
+        // Refresh the requests list
+        fetchRequests()
+      } else {
+        toast({
+          title: "Error",
+          description: data.error || "Failed to delete issuer request",
+          variant: "destructive",
+        })
+      }
+    } catch (error: any) {
+      console.error("💥 Error deleting issuer request:", {
+        message: error.message,
+        stack: error.stack
+      })
+      toast({
+        title: "Error",
+        description: "An unexpected error occurred",
+        variant: "destructive",
+      })
+    }
+  }
+
   const getStatusBadge = (status: string) => {
     switch (status.toLowerCase()) {
       case "pending":
@@ -378,56 +423,51 @@ export default function IssuerRequestsPage() {
               {isLoadingRequests ? (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center py-8">
-                    Loading requests...
+                    <div className="flex items-center justify-center">
+                      <Loader2 className="h-6 w-6 animate-spin mr-2" />
+                      Loading requests...
+                    </div>
                   </TableCell>
                 </TableRow>
               ) : filteredRequests.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8">
-                    <div className="flex flex-col items-center justify-center text-gray-500">
-                      <User className="h-10 w-10 mb-2" />
-                      <p>No issuer requests found matching your search criteria</p>
-                    </div>
+                  <TableCell colSpan={7} className="text-center py-8 text-gray-500">
+                    No issuer requests found
                   </TableCell>
                 </TableRow>
               ) : (
                 filteredRequests.map((request) => (
                   <TableRow key={request._id}>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <User className="h-4 w-4 text-gray-500" />
-                        <div>
-                          <div className="font-medium">{request.userId.name}</div>
-                          <div className="text-xs text-gray-500">{request.userId.email}</div>
-                        </div>
-                      </div>
-                    </TableCell>
+                    <TableCell className="font-medium">{request.userId.name}</TableCell>
+                    <TableCell>{request.userId.email}</TableCell>
                     <TableCell>{request.organization}</TableCell>
                     <TableCell>{request.city}</TableCell>
                     <TableCell>{request.designation}</TableCell>
                     <TableCell>{new Date(request.dateOfJoining).toLocaleDateString()}</TableCell>
                     <TableCell>{getStatusBadge(request.status)}</TableCell>
-                    <TableCell className="text-right">
+                    <TableCell>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon">
+                          <Button variant="ghost" className="h-8 w-8 p-0">
+                            <span className="sr-only">Open menu</span>
                             <MoreHorizontal className="h-4 w-4" />
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem onClick={() => handleViewUser(request.userId._id)}>
-                            <User className="mr-2 h-4 w-4" />
                             View Applicant
                           </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => handleViewDocument("License Document", request.licenseUrl)}
-                          >
-                            <FileText className="mr-2 h-4 w-4" />
+                          <DropdownMenuItem onClick={() => handleViewDocument("License Document", request.licenseUrl)}>
                             View License
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => handleOpenReviewDialog(request)}>
-                            <Eye className="mr-2 h-4 w-4" />
                             Review Application
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => handleDeleteRequest(request._id)}
+                            className="text-red-600"
+                          >
+                            Delete Request
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -620,7 +660,4 @@ export default function IssuerRequestsPage() {
     </div>
   )
 }
-
-
-
-//earlier it was static
+//earlier 625

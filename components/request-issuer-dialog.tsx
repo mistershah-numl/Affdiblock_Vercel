@@ -23,6 +23,7 @@ export default function RequestIssuerDialog({ open, onOpenChange }: RequestIssue
   const [dateOfJoining, setDateOfJoining] = useState("")
   const [licenseFile, setLicenseFile] = useState<File | null>(null)
   const [hasPendingRequest, setHasPendingRequest] = useState(false)
+  const [hasRejectedRequest, setHasRejectedRequest] = useState(false)  // New state for rejected requests
   const [formErrors, setFormErrors] = useState<{ [key: string]: string }>({})
 
   useEffect(() => {
@@ -38,15 +39,25 @@ export default function RequestIssuerDialog({ open, onOpenChange }: RequestIssue
         headers: { Authorization: `Bearer ${token}` },
       })
       const data = await response.json()
-      if (data.success && data.hasPendingRequest) {
-        setHasPendingRequest(true)
-        toast({ title: "Pending Request", description: data.message, variant: "destructive" })
+      if (data.success) {
+        if (data.hasPendingRequest) {
+          setHasPendingRequest(true)
+          setHasRejectedRequest(false)
+          toast({ title: "Pending Request", description: data.message, variant: "destructive" })
+        } else if (data.data && data.data.status === "Rejected") {
+          setHasRejectedRequest(true)
+          setHasPendingRequest(false)
+          toast({ title: "Rejected Request", description: data.message, variant: "destructive" })
+        } else {
+          setHasPendingRequest(false)
+          setHasRejectedRequest(false)
+        }
       } else {
-        setHasPendingRequest(false)
+        toast({ title: "Error", description: data.error || "Failed to check request status", variant: "destructive" })
       }
     } catch (error) {
-      console.error("Error checking pending request:", error)
-      toast({ title: "Error", description: "Failed to check pending request", variant: "destructive" })
+      console.error("Error checking request:", error)
+      toast({ title: "Error", description: "Failed to check request status", variant: "destructive" })
     }
   }
 
@@ -176,6 +187,11 @@ export default function RequestIssuerDialog({ open, onOpenChange }: RequestIssue
             <p className="text-center text-gray-600">You already have a pending issuer request. Please wait for admin review.</p>
             <Button onClick={() => onOpenChange(false)}>Close</Button>
           </div>
+        ) : hasRejectedRequest ? (
+          <div className="flex-1 flex flex-col items-center justify-center space-y-4">
+            <p className="text-center text-gray-600">Your issuer request was rejected. You cannot submit another request.</p>
+            <Button onClick={() => onOpenChange(false)}>Close</Button>
+          </div>
         ) : (
           <div className="flex-1 space-y-6 py-6">
             <div>
@@ -265,7 +281,7 @@ export default function RequestIssuerDialog({ open, onOpenChange }: RequestIssue
           </div>
         )}
 
-        {!hasPendingRequest && (
+        {!hasPendingRequest && !hasRejectedRequest && (
           <DialogFooter>
             <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
               Cancel
@@ -279,3 +295,5 @@ export default function RequestIssuerDialog({ open, onOpenChange }: RequestIssue
     </Dialog>
   )
 }
+
+//earlier 281

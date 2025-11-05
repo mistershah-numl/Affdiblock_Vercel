@@ -97,11 +97,11 @@ export function AppSidebar() {
         label: "Issued Affidavits",
         href: "/dashboard/issued-affidavits",
       },
-      {
-        icon: <Flag className="h-5 w-5" />,
-        label: "Flagged Witnesses",
-        href: "/dashboard/flagged-witnesses",
-      },
+      // {
+      //   icon: <Flag className="h-5 w-5" />,
+      //   label: "Flagged Witnesses",
+      //   href: "/dashboard/flagged-witnesses",
+      // },
     ]
 
     const adminItems = [
@@ -125,11 +125,11 @@ export function AppSidebar() {
         label: "Issuer Requests",
         href: "/dashboard/issuer-requests",
       },
-      {
-        icon: <Flag className="h-5 w-5" />,
-        label: "Flagged Witnesses",
-        href: "/dashboard/flagged-witnesses",
-      },
+      // {
+      //   icon: <Flag className="h-5 w-5" />,
+      //   label: "Flagged Witnesses",
+      //   href: "/dashboard/flagged-witnesses",
+      // },
       {
         icon: <Users className="h-5 w-5" />,
         label: "Banned Users",
