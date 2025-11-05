@@ -32,7 +32,7 @@ export async function GET(request: Request) {
     }
 
     // Fetch all users from MongoDB (excluding passwords)
-    const users = await User.find().select("name email roles idCardNumber area walletAddress status remarks createdAt").lean();
+    const users = await User.find().select("name email roles idCardNumber address city phone walletAddress status remarks createdAt").lean();
 
     // Fetch affidavit counts for each user
     const usersWithAffidavits = await Promise.all(
@@ -81,7 +81,9 @@ export async function GET(request: Request) {
       email: user.email,
       roles: user.roles,
       idCardNumber: user.idCardNumber,
-      area: user.area,
+      address: user.address,
+      city: user.city,
+      phone: user.phone,
       walletAddress: user.walletAddress,
       status: user.status,
       remarks: user.remarks,

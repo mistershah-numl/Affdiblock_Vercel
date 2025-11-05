@@ -121,6 +121,20 @@ export default function CreateAffidavitDialog({ open, onOpenChange }: CreateAffi
     }
   }, [open, token])
 
+  // Auto-fill description based on category and details
+  useEffect(() => {
+    if (category === 'vehicle' || category === 'property') {
+      const fields = categoryFields[category] || []
+      const filledDetails = fields.filter(field => details[field.name] && details[field.name] !== '')
+      const detailsText = filledDetails.map(field => `${field.label}: ${details[field.name]}`).join(', ')
+      const prefix = category === 'vehicle' ? 'Vehicle Details: ' : 'Property Details: '
+      const newDesc = detailsText ? prefix + detailsText + '\nAgreement Details: ' : ''
+      setDescription(newDesc)
+    } else if (description.startsWith('Vehicle Details:') || description.startsWith('Property Details:')) {
+      setDescription('')
+    }
+  }, [category, details])
+
   const fetchData = async () => {
     setIsLoadingData(true)
     try {
@@ -130,8 +144,8 @@ export default function CreateAffidavitDialog({ open, onOpenChange }: CreateAffi
       if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`)
       const data = await response.json()
       if (data.success) {
-        setIssuers(data.issuers || [])
-        setUsers(data.users || [])
+        setIssuers((data.issuers || []).filter(issuer => issuer.status === 'Active'))
+        setUsers((data.users || []).filter(user => user.status === 'Active'))
         setHasWallet(!!data.currentUser?.walletAddress)
         setInitiatorIdCardNumber(data.currentUser?.idCardNumber || null)
       } else {
@@ -410,13 +424,13 @@ export default function CreateAffidavitDialog({ open, onOpenChange }: CreateAffi
                     <PopoverContent className="w-full p-0">
                       <Command>
                         <CommandInput placeholder="Search by name or ID..." />
-                        <CommandList>
+                        <CommandList className="max-h-48 overflow-y-auto">
                           <CommandEmpty>No issuer found.</CommandEmpty>
                           <CommandGroup>
                             {availableIssuers.map((issuer) => (
                               <CommandItem key={issuer._id} value={`${issuer.name}-${issuer.idCardNumber}`} onSelect={() => { setIssuerId(issuer._id); setIssuerOpen(false); }}>
                                 <Check className={cn("mr-2 h-4 w-4", issuerId === issuer._id ? "opacity-100" : "opacity-0")} />
-                                {issuer.name} - {issuer.area || "N/A"} - {issuer.idCardNumber || "N/A"}
+                                {issuer.name} - {issuer.city || issuer.address || "N/A"} - {issuer.phone || "N/A"}
                               </CommandItem>
                             ))}
                           </CommandGroup>
@@ -493,13 +507,13 @@ export default function CreateAffidavitDialog({ open, onOpenChange }: CreateAffi
                       <PopoverContent className="w-full p-0">
                         <Command>
                           <CommandInput placeholder="Search by name or ID..." />
-                          <CommandList>
+                          <CommandList className="max-h-48 overflow-y-auto">
                             <CommandEmpty>No user found.</CommandEmpty>
                             <CommandGroup>
                               {availableUsersForSeller.map((user) => (
                                 <CommandItem key={user._id} value={`${user.name}-${user.idCardNumber}`} onSelect={() => { setSellerId(user._id); setSellerOpen(false); }}>
                                   <Check className={cn("mr-2 h-4 w-4", sellerId === user._id ? "opacity-100" : "opacity-0")} />
-                                  {user.name} - {user.area || "N/A"} - {user.idCardNumber || "N/A"}
+                                  {user.name} - {user.city || user.address || "N/A"} - {user.phone || "N/A"}
                                 </CommandItem>
                               ))}
                             </CommandGroup>
@@ -526,13 +540,13 @@ export default function CreateAffidavitDialog({ open, onOpenChange }: CreateAffi
                       <PopoverContent className="w-full p-0">
                         <Command>
                           <CommandInput placeholder="Search by name or ID..." />
-                          <CommandList>
+                          <CommandList className="max-h-48 overflow-y-auto">
                             <CommandEmpty>No user found.</CommandEmpty>
                             <CommandGroup>
                               {availableUsersForBuyer.map((user) => (
                                 <CommandItem key={user._id} value={`${user.name}-${user.idCardNumber}`} onSelect={() => { setBuyerId(user._id); setBuyerOpen(false); }}>
                                   <Check className={cn("mr-2 h-4 w-4", buyerId === user._id ? "opacity-100" : "opacity-0")} />
-                                  {user.name} - {user.area || "N/A"} - {user.idCardNumber || "N/A"}
+                                  {user.name} - {user.city || user.address || "N/A"} - {user.phone || "N/A"}
                                 </CommandItem>
                               ))}
                             </CommandGroup>
@@ -576,13 +590,13 @@ export default function CreateAffidavitDialog({ open, onOpenChange }: CreateAffi
                     <PopoverContent className="w-full p-0">
                       <Command>
                         <CommandInput placeholder="Search by name or ID..." />
-                        <CommandList>
+                        <CommandList className="max-h-48 overflow-y-auto">
                           <CommandEmpty>No contact found.</CommandEmpty>
                           <CommandGroup>
                             {availableUsersForWitnesses.map((user) => (
                               <CommandItem key={user._id} value={`${user.name}-${user.idCardNumber}`} onSelect={() => { setWitnessContactId(user._id); setWitnessContactOpen(false); }}>
                                 <Check className={cn("mr-2 h-4 w-4", witnessContactId === user._id ? "opacity-100" : "opacity-0")} />
-                                {user.name} - {user.area || "N/A"} - {user.idCardNumber || "N/A"}
+                                {user.name} - {user.city || user.address || "N/A"} - {user.phone || "N/A"}
                               </CommandItem>
                             ))}
                           </CommandGroup>
