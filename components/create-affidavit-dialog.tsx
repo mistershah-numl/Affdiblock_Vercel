@@ -17,7 +17,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Check, ChevronsUpDown, X, Plus, User, Users, Wallet, Info } from "lucide-react"
+import { Check, ChevronsUpDown, X, Plus, Users, Wallet, Info } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -30,14 +30,28 @@ interface CreateAffidavitDialogProps {
   onOpenChange: (open: boolean) => void
 }
 
-interface User {
+interface UserData {
   _id: string
   name: string
   email: string
   roles: string[]
   idCardNumber?: string
-  area?: string
+  address?: string
+  city?: string
+  phone?: string
   walletAddress?: string
+  status: string
+}
+
+interface ApiResponse {
+  success: boolean
+  issuers?: UserData[]
+  users?: UserData[]
+  currentUser?: {
+    idCardNumber?: string
+    walletAddress?: string
+  }
+  error?: string
 }
 
 const categories = [
@@ -104,8 +118,8 @@ export default function CreateAffidavitDialog({ open, onOpenChange }: CreateAffi
   const [witnesses, setWitnesses] = useState<Array<{ contactId: string; name: string }>>([])
 
   // Data fetching state
-  const [issuers, setIssuers] = useState<User[]>([])
-  const [users, setUsers] = useState<User[]>([])
+  const [issuers, setIssuers] = useState<UserData[]>([])
+  const [users, setUsers] = useState<UserData[]>([])
   const [isLoadingData, setIsLoadingData] = useState(true)
 
   // Temporary state for selecting parties
@@ -142,7 +156,7 @@ export default function CreateAffidavitDialog({ open, onOpenChange }: CreateAffi
         headers: { Authorization: `Bearer ${token}` },
       })
       if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`)
-      const data = await response.json()
+      const data: ApiResponse = await response.json()
       if (data.success) {
         setIssuers((data.issuers || []).filter(issuer => issuer.status === 'Active'))
         setUsers((data.users || []).filter(user => user.status === 'Active'))
