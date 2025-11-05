@@ -530,7 +530,7 @@ export default function UsersPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="Active">Active</SelectItem>
-                  <SelectItem value="Inactive">Inactive</SelectItem>
+                  {/* <SelectItem value="Inactive">Inactive</SelectItem> */}
                   <SelectItem value="Banned">Banned</SelectItem>
                 </SelectContent>
               </Select>
