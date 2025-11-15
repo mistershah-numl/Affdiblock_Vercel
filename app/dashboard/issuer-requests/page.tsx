@@ -629,14 +629,17 @@ export default function IssuerRequestsPage() {
                 <span className="ml-2">Loading document...</span>
               </div>
             ) : previewDocument && documentType ? (
-              <div className="bg-gray-100 rounded-md p-2 h-[500px] flex items-center justify-center overflow-auto">
+                            <div className="bg-gray-100 rounded-md p-2 h-[500px] flex items-center justify-center overflow-auto">
                 {documentType === "pdf" ? (
-                  <iframe
-                    src={`${previewDocument.url}#toolbar=0&navpanes=0&scrollbar=1`}
-                    title={previewDocument.title}
-                    className="w-full h-full border-none"
-                    style={{ overflow: "auto" }}
-                  />
+                  <object
+                    data={previewDocument.url}
+                    type="application/pdf"
+                    width="100%"
+                    height="100%"
+                    style={{ border: "none" }}
+                  >
+                    <p>Unable to display PDF. <a href={previewDocument.url} target="_blank" rel="noopener noreferrer">Open in new tab</a></p>
+                  </object>
                 ) : (
                   <img
                     src={previewDocument.url}
@@ -660,4 +663,4 @@ export default function IssuerRequestsPage() {
     </div>
   )
 }
-//earlier 625
+//earlier 625 , now shows pdf lisence and image lisence as well without directly downloading 

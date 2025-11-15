@@ -792,12 +792,15 @@ export default function UserDetailsPage() {
               ) : previewDocument && documentType ? (
                 <div className="bg-gray-100 rounded-md p-4 flex items-center justify-center" style={{ minHeight: '600px' }}>
                   {documentType === "pdf" ? (
-                    <iframe
-                      src={`${previewDocument.url}#toolbar=0&navpanes=0&scrollbar=1`}
-                      title={previewDocument.title}
+                    <object
+                      data={previewDocument.url}
+                      type="application/pdf"
+                      width="100%"
+                      height="600"
                       className="w-full border-none rounded"
-                      style={{ height: '600px' }}
-                    />
+                    >
+                      <p>Unable to display PDF. <a href={previewDocument.url} target="_blank" rel="noopener noreferrer">Download instead</a></p>
+                    </object>
                   ) : (
                     <div className="w-full flex items-center justify-center" style={{ height: '600px' }}>
                       <img
