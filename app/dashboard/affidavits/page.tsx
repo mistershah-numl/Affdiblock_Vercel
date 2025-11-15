@@ -977,7 +977,7 @@ export default function AffidavitsPage() {
                   <TableCell>{request.category}</TableCell>
                   <TableCell
                     className="cursor-pointer"
-                    onClick={() => handleViewProfile(request.issuerId.idCardNumber)}
+                    onClick={() => router.push(`/dashboard/users/${request.issuerId._id}`)}
                   >
                     {request.issuerId.name}
                   </TableCell>
@@ -1261,7 +1261,7 @@ export default function AffidavitsPage() {
                     <Label className="text-indigo-600 font-medium">Initiator</Label>
                     <p
                       className="text-sm text-gray-700 cursor-pointer"
-                      onClick={() => handleViewProfile(selectedAffidavitRequest.initiatorIdCardNumber)}
+                      onClick={() => router.push(`/dashboard/users/${selectedAffidavitRequest.createdBy._id}`)}
                     >
                       {selectedAffidavitRequest.createdBy.name} (ID Card:{" "}
                       {selectedAffidavitRequest.initiatorIdCardNumber})
@@ -1271,7 +1271,7 @@ export default function AffidavitsPage() {
                     <Label className="text-indigo-600 font-medium">Issuer</Label>
                     <p
                       className="text-sm text-gray-700 cursor-pointer"
-                      onClick={() => handleViewProfile(selectedAffidavitRequest.issuerId.idCardNumber)}
+                      onClick={() => router.push(`/dashboard/users/${selectedAffidavitRequest.issuerId._id}`)}
                     >
                       {selectedAffidavitRequest.issuerId.name} (ID Card:{" "}
                       {selectedAffidavitRequest.issuerId.idCardNumber}, Area:{" "}
@@ -1290,7 +1290,7 @@ export default function AffidavitsPage() {
                       <Label className="text-indigo-600 font-medium">Seller</Label>
                       <p
                         className="text-sm text-gray-700 cursor-pointer"
-                        onClick={() => handleViewProfile(selectedAffidavitRequest.sellerId.idCardNumber)}
+                        onClick={() => router.push(`/dashboard/users/${selectedAffidavitRequest.sellerId._id}`)}
                       >
                         {selectedAffidavitRequest.sellerId.name} (ID Card:{" "}
                         {selectedAffidavitRequest.sellerId.idCardNumber})
@@ -1309,7 +1309,7 @@ export default function AffidavitsPage() {
                       <Label className="text-indigo-600 font-medium">Buyer</Label>
                       <p
                         className="text-sm text-gray-700 cursor-pointer"
-                        onClick={() => handleViewProfile(selectedAffidavitRequest.buyerId.idCardNumber)}
+                        onClick={() => router.push(`/dashboard/users/${selectedAffidavitRequest.buyerId._id}`)}
                       >
                         {selectedAffidavitRequest.buyerId.name} (ID Card:{" "}
                         {selectedAffidavitRequest.buyerId.idCardNumber})
@@ -1330,7 +1330,7 @@ export default function AffidavitsPage() {
                         <p
                           key={index}
                           className="text-sm text-gray-700 cursor-pointer"
-                          onClick={() => handleViewProfile(witness.contactId.idCardNumber)}
+                          onClick={() => router.push(`/dashboard/users/${witness.contactId._id}`)}
                         >
                           {witness.contactId.name} (ID Card: {witness.contactId.idCardNumber})
                           {witness.hasAccepted === true ? (
@@ -1527,3 +1527,4 @@ export default function AffidavitsPage() {
     </div>
   )
 }
+//earlier 1529 , each user goes to http://localhost:3000/dashboard/users/6885bd4732d04f825d940ef0 only

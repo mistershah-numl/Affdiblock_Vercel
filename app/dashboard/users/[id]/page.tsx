@@ -46,6 +46,15 @@ import { Separator } from "@/components/ui/separator"
 import { useAuth } from "@/lib/auth-context"
 import { ProtectedRoute } from "@/components/protected-route"
 import { toast } from "@/components/ui/use-toast"
+import Image from "next/image"
+
+// Helper function for avatar URL (direct IPFS or placeholder)
+const getAvatarUrl = (path: string | null | undefined) => {
+  if (!path || !path.startsWith("https://gateway.pinata.cloud/ipfs/")) {
+    return "/placeholder.svg?height=128&width=128";
+  }
+  return path;
+};
 
 export default function UserDetailsPage() {
   const router = useRouter()
@@ -98,7 +107,7 @@ export default function UserDetailsPage() {
   }, [isClient, authLoading, isAuthenticated, router])
 
   useEffect(() => {
-    if (userId && token && isAuthenticated && authUser?.activeRole === "Admin") {
+    if (userId && token && isAuthenticated && (authUser?.activeRole === "Admin" || authUser?.activeRole === "Issuer")) {
       fetchUserData()
     }
   }, [userId, token, isAuthenticated, authUser])
@@ -308,7 +317,7 @@ export default function UserDetailsPage() {
     )
   }
 
-  if (!isAuthenticated || !authUser || authUser.activeRole !== "Admin") {
+  if (!isAuthenticated || !authUser || (authUser.activeRole !== "Admin" && authUser.activeRole !== "Issuer")) {
     return (
       <div className="flex flex-col gap-6 p-6">
         <div className="flex flex-col items-center justify-center h-[calc(100vh-200px)]">
@@ -351,6 +360,7 @@ export default function UserDetailsPage() {
   }
 
   const isIssuer = user.roles?.includes("Issuer")
+  const isAdmin = authUser.activeRole === "Admin"
 
   return (
     <ProtectedRoute>
@@ -363,18 +373,20 @@ export default function UserDetailsPage() {
             </Button>
             <h1 className="text-3xl font-bold tracking-tight">User Details</h1>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={handleOpenEditDialog}>
-              <Edit className="mr-2 h-4 w-4" />
-              Edit User
-            </Button>
-            {user.status !== "Banned" && (
-              <Button variant="destructive" onClick={handleOpenBanDialog}>
-                <Ban className="mr-2 h-4 w-4" />
-                Ban User
+          {isAdmin && (
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" onClick={handleOpenEditDialog}>
+                <Edit className="mr-2 h-4 w-4" />
+                Edit User
               </Button>
-            )}
-          </div>
+              {user.status !== "Banned" && (
+                <Button variant="destructive" onClick={handleOpenBanDialog}>
+                  <Ban className="mr-2 h-4 w-4" />
+                  Ban User
+                </Button>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Affidavit Stats Cards */}
@@ -427,8 +439,14 @@ export default function UserDetailsPage() {
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="flex flex-col items-center">
-                <div className="w-24 h-24 rounded-full bg-gray-200 flex items-center justify-center mb-4">
-                  <User className="h-12 w-12 text-gray-500" />
+                <div className="w-24 h-24 rounded-full bg-gray-200 flex items-center justify-center mb-4 overflow-hidden">
+                  <Image
+                    src={getAvatarUrl(user.avatar)}
+                    alt={user.name}
+                    width={96}
+                    height={96}
+                    className="w-full h-full object-cover"
+                  />
                 </div>
                 <h3 className="text-xl font-semibold">{user.name}</h3>
                 <div className="flex flex-wrap items-center justify-center gap-2 mt-1">
@@ -577,6 +595,7 @@ export default function UserDetailsPage() {
                 <TabsTrigger value="active">Active</TabsTrigger>
                 <TabsTrigger value="pending">Pending</TabsTrigger>
                 <TabsTrigger value="rejected">Rejected</TabsTrigger>
+                <TabsTrigger value="witnessed">Witnessed</TabsTrigger>  {/* New tab for witnessed affidavits */}
               </TabsList>
               <TabsContent value="all">
                 <AffidavitsTable affidavits={affidavits} onViewAffidavit={handleViewAffidavit} />
@@ -596,6 +615,12 @@ export default function UserDetailsPage() {
               <TabsContent value="rejected">
                 <AffidavitsTable
                   affidavits={affidavits.filter((a) => a.status === "Rejected" || a.status === "Revoked")}
+                  onViewAffidavit={handleViewAffidavit}
+                />
+              </TabsContent>
+              <TabsContent value="witnessed">  {/* New content for witnessed affidavits */}
+                <AffidavitsTable
+                  affidavits={affidavits.filter((a) => a.witnesses.some((w: any) => w.contactId === userId))}
                   onViewAffidavit={handleViewAffidavit}
                 />
               </TabsContent>
@@ -882,5 +907,5 @@ function AffidavitsTable({
     </Table>
   )
 }
-
-//earlier 882 and showing pdf etc well but loads after cliking , images with standard dimensions 
+//earlier 888 , working for both admin and issuer , for issuer , no button are showing , also showing witnessed
+//now it shows profile photo as well and workign well for both issuer and admin , not for others , shows access denied

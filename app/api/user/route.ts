@@ -31,8 +31,25 @@ export async function GET(request: Request) {
       return NextResponse.json({ success: false, error: "User not found" }, { status: 404 });
     }
 
-    // Fetch all users from MongoDB (excluding passwords)
-    const users = await User.find().select("name email roles idCardNumber address city phone walletAddress status remarks createdAt").lean();
+    // Check for filter query param to fetch a single user by idCardNumber
+    const url = new URL(request.url);
+    const filterParam = url.searchParams.get("filter");
+    let idCardNumber = null;
+    if (filterParam && filterParam.startsWith("idCardNumber:")) {
+      idCardNumber = filterParam.split(":")[1];
+    }
+
+    // Fetch all users from MongoDB (excluding passwords) or single user
+    let users;
+    if (idCardNumber) {
+      const user = await User.findOne({ idCardNumber }).select("name email roles idCardNumber address city phone walletAddress status remarks createdAt").lean();
+      if (!user) {
+        return NextResponse.json({ success: false, error: "User not found" }, { status: 404 });
+      }
+      users = [user];
+    } else {
+      users = await User.find().select("name email roles idCardNumber address city phone walletAddress status remarks createdAt").lean();
+    }
 
     // Fetch affidavit counts for each user
     const usersWithAffidavits = await Promise.all(

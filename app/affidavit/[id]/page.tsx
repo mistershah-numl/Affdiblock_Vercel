@@ -24,6 +24,7 @@ import { jsPDF } from "jspdf"
 import { toast } from "@/components/ui/use-toast"
 import { generateAffidavitHash, createAffidavitDataForHash } from "@/lib/utils/hashGenerator"
 import { ethers } from "ethers"
+import { useAuth } from "@/lib/auth-context"
 
 const AffidavitRegistryABI = [
   {
@@ -130,6 +131,7 @@ export default function AffidavitDetailPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [showOriginalPopup, setShowOriginalPopup] = useState(false)
   const [selectedDocument, setSelectedDocument] = useState<any>(null)
+  const { user: authUser, token } = useAuth()
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -519,7 +521,9 @@ export default function AffidavitDetailPage() {
 
   const handleViewProfile = async (idCard: string) => {
     try {
-      const response = await fetch(`/api/user?filter=idCardNumber:${idCard}`)
+      const response = await fetch(`/api/user?filter=idCardNumber:${idCard}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
       if (!response.ok) {
         throw new Error(`Failed to fetch user: ${response.statusText}`)
       }
@@ -949,8 +953,12 @@ export default function AffidavitDetailPage() {
                             Issuer
                           </Badge>
                           <h3
-                            className="font-semibold cursor-pointer hover:text-blue-600 transition-colors"
-                            onClick={() => handleViewProfile(affidavit.issuerIdCardNumber || "")}
+                            className={`font-semibold ${authUser?.activeRole === "Admin" || authUser?.activeRole === "Issuer" ? "cursor-pointer hover:text-blue-600 transition-colors" : ""}`}
+                            onClick={() => {
+                              if (authUser?.activeRole === "Admin" || authUser?.activeRole === "Issuer") {
+                                handleViewProfile(affidavit.issuerIdCardNumber || "")
+                              }
+                            }}
                           >
                             {affidavit.issuerName || "N/A"}
                           </h3>
@@ -962,8 +970,12 @@ export default function AffidavitDetailPage() {
                               Seller
                             </Badge>
                             <h3
-                              className="font-semibold cursor-pointer hover:text-blue-600 transition-colors"
-                              onClick={() => handleViewProfile(affidavit.sellerIdCardNumber || "")}
+                              className={`font-semibold ${authUser?.activeRole === "Admin" || authUser?.activeRole === "Issuer" ? "cursor-pointer hover:text-blue-600 transition-colors" : ""}`}
+                              onClick={() => {
+                                if (authUser?.activeRole === "Admin" || authUser?.activeRole === "Issuer") {
+                                  handleViewProfile(affidavit.sellerIdCardNumber || "")
+                                }
+                              }}
                             >
                               {affidavit.sellerName}
                             </h3>
@@ -976,8 +988,12 @@ export default function AffidavitDetailPage() {
                               Buyer
                             </Badge>
                             <h3
-                              className="font-semibold cursor-pointer hover:text-blue-600 transition-colors"
-                              onClick={() => handleViewProfile(affidavit.buyerIdCardNumber || "")}
+                              className={`font-semibold ${authUser?.activeRole === "Admin" || authUser?.activeRole === "Issuer" ? "cursor-pointer hover:text-blue-600 transition-colors" : ""}`}
+                              onClick={() => {
+                                if (authUser?.activeRole === "Admin" || authUser?.activeRole === "Issuer") {
+                                  handleViewProfile(affidavit.buyerIdCardNumber || "")
+                                }
+                              }}
                             >
                               {affidavit.buyerName}
                             </h3>
@@ -994,8 +1010,12 @@ export default function AffidavitDetailPage() {
                           {affidavit.witnesses.map((witness: any, index: number) => (
                             <div key={index} className="bg-gray-100 p-4 rounded-lg shadow-sm">
                               <h3
-                                className="font-semibold cursor-pointer hover:text-blue-600 transition-colors"
-                                onClick={() => handleViewProfile(witness.contactId?.idCardNumber || "")}
+                                className={`font-semibold ${authUser?.activeRole === "Admin" || authUser?.activeRole === "Issuer" ? "cursor-pointer hover:text-blue-600 transition-colors" : ""}`}
+                                onClick={() => {
+                                  if (authUser?.activeRole === "Admin" || authUser?.activeRole === "Issuer") {
+                                    handleViewProfile(witness.contactId?.idCardNumber || "")
+                                  }
+                                }}
                               >
                                 {witness.contactId?.name || "N/A"}
                               </h3>
@@ -1321,4 +1341,4 @@ export default function AffidavitDetailPage() {
   )
 }
 
-//workin and showing revoked by etc as expected , if affdiavit is revoked
+// 1326workin and showing revoked by etc as expected , if affdiavit is revoked
