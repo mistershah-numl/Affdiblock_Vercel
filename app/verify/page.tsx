@@ -69,12 +69,21 @@ export default function VerifyPage() {
       return
     }
 
-    setIsScanning(true)
     console.log("Starting QR code scanning...")
     
+    // Add a small delay to ensure video is fully ready on mobile
+    await new Promise(resolve => setTimeout(resolve, 500))
+    
+    if (!videoRef.current) {
+      console.error("Video ref lost during delay")
+      return
+    }
+
+    setIsScanning(true)
+    
     try {
-      await codeReader.current.decodeFromVideoDevice(
-        null,
+      const controls = await codeReader.current.decodeFromVideoDevice(
+        undefined, // Let browser choose the best camera
         videoRef.current,
         (result, error) => {
           if (result) {
@@ -91,12 +100,19 @@ export default function VerifyPage() {
           }
         }
       )
+      console.log("QR scanning started successfully")
     } catch (err) {
       console.error("Error during QR scanning:", err)
       const errorMessage = err instanceof Error ? err.message : "Unknown error"
-      setCameraError("QR scan error: " + errorMessage)
-      setCameraActive(false)
-      setIsScanning(false)
+      
+      // Don't show error for common initialization issues
+      if (errorMessage.includes("NotFoundException")) {
+        console.log("Waiting for QR code...")
+      } else {
+        setCameraError("QR scan error: " + errorMessage)
+        setCameraActive(false)
+        setIsScanning(false)
+      }
     }
   }
 
@@ -115,16 +131,60 @@ export default function VerifyPage() {
         throw new Error("MediaDevices API not available")
       }
 
+      // Check if on HTTPS or localhost
+      const isSecureContext = window.isSecureContext
+      const isLocalhost = window.location.hostname === 'localhost' || 
+                         window.location.hostname === '127.0.0.1'
+      
+      if (!isSecureContext && !isLocalhost) {
+        throw new Error("HTTPS required for camera access")
+      }
+
       console.log("Requesting camera access...")
       
-      // Start with basic constraints for better compatibility
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: "environment",
-          width: { ideal: 640 },
-          height: { ideal: 480 }
+      // Try different constraint strategies for mobile compatibility
+      let stream: MediaStream | null = null
+      
+      // Strategy 1: Try environment camera with ideal constraints
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 1280, max: 1920 },
+            height: { ideal: 720, max: 1080 }
+          }
+        })
+        console.log("Strategy 1 succeeded: environment camera with ideal constraints")
+      } catch (err1) {
+        console.log("Strategy 1 failed, trying strategy 2:", err1)
+        
+        // Strategy 2: Try with exact environment facing mode
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              facingMode: "environment"
+            }
+          })
+          console.log("Strategy 2 succeeded: environment camera only")
+        } catch (err2) {
+          console.log("Strategy 2 failed, trying strategy 3:", err2)
+          
+          // Strategy 3: Try any camera with minimal constraints
+          try {
+            stream = await navigator.mediaDevices.getUserMedia({
+              video: true
+            })
+            console.log("Strategy 3 succeeded: any camera")
+          } catch (err3) {
+            console.log("Strategy 3 failed:", err3)
+            throw err3 // Re-throw the last error
+          }
         }
-      })
+      }
+
+      if (!stream) {
+        throw new Error("Failed to get camera stream")
+      }
 
       console.log("Camera access granted")
       streamRef.current = stream
@@ -136,25 +196,45 @@ export default function VerifyPage() {
       if (videoRef.current) {
         videoRef.current.srcObject = stream
         videoRef.current.setAttribute("playsinline", "true")
+        videoRef.current.setAttribute("webkit-playsinline", "true")
+        videoRef.current.muted = true
 
         // Wait for video to be ready
-        await new Promise<void>((resolve) => {
-          if (videoRef.current) {
-            videoRef.current.onloadedmetadata = () => {
-              videoRef.current?.play().then(() => {
-                setTimeout(() => resolve(), 500)
-              }).catch((err) => {
-                console.error("Error playing video:", err)
-                resolve()
-              })
-            }
-          } else {
-            resolve()
+        await new Promise<void>((resolve, reject) => {
+          if (!videoRef.current) {
+            reject(new Error("Video element not available"))
+            return
           }
+
+          const video = videoRef.current
+          
+          video.onloadedmetadata = async () => {
+            try {
+              console.log("Video metadata loaded")
+              await video.play()
+              console.log("Video playing")
+              setTimeout(() => resolve(), 800) // Longer delay for mobile
+            } catch (playErr) {
+              console.error("Error playing video:", playErr)
+              reject(playErr)
+            }
+          }
+
+          video.onerror = (err) => {
+            console.error("Video element error:", err)
+            reject(new Error("Video element error"))
+          }
+
+          // Timeout fallback
+          setTimeout(() => {
+            if (video.readyState >= 2) { // HAVE_CURRENT_DATA
+              resolve()
+            }
+          }, 3000)
         })
 
         // Start scanning
-        startScanning()
+        await startScanning()
       }
     } catch (err: any) {
       console.error("Camera access error:", err)
@@ -162,19 +242,33 @@ export default function VerifyPage() {
       let errorMessage = "Failed to access camera. "
       
       if (err.name === "NotAllowedError") {
-        errorMessage = "Camera access denied. Please allow camera access in your browser settings."
+        errorMessage = "Camera permission denied. Please allow camera access and reload the page."
       } else if (err.name === "NotFoundError") {
         errorMessage = "No camera found on this device. Please use manual verification."
-      } else if (err.name === "NotSupportedError") {
-        errorMessage = "Camera access requires HTTPS or localhost. Please use manual verification."
+      } else if (err.name === "NotSupportedError" || err.message === "HTTPS required for camera access") {
+        errorMessage = "Camera requires HTTPS. Please access via https:// or use manual verification."
+      } else if (err.name === "NotReadableError") {
+        errorMessage = "Camera is in use by another app. Please close other apps and try again."
+      } else if (err.name === "OverconstrainedError") {
+        errorMessage = "Camera constraints not supported. Trying with basic settings..."
+        // Don't set camera inactive, let it retry
+        setCameraError(errorMessage)
+        return
       } else if (err.message === "MediaDevices API not available") {
         errorMessage = "Camera access requires a modern browser. Please update your browser or use manual verification."
       } else {
-        errorMessage += "Please use manual verification below."
+        errorMessage += err.message || "Please use manual verification below."
       }
       
       setCameraError(errorMessage)
       setCameraActive(false)
+      setIsScanning(false)
+      
+      // Clean up stream if it exists
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop())
+        streamRef.current = null
+      }
     }
   }
 
@@ -381,15 +475,21 @@ export default function VerifyPage() {
                 <CardTitle>Scan QR Code</CardTitle>
                 <CardDescription>
                   Point your camera at the QR code on the affidavit to verify its authenticity
+                  {typeof window !== "undefined" && !window.isSecureContext && 
+                   window.location.protocol === "http:" && (
+                    <span className="block mt-2 text-sm text-amber-600">
+                      ⚠️ Camera requires HTTPS. Please use manual verification or access via https://
+                    </span>
+                  )}
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="h-[300px] overflow-hidden rounded-lg border flex items-center justify-center bg-gray-50">
                   {cameraActive ? (
                     cameraError ? (
-                      <div className="flex flex-col items-center">
+                      <div className="flex flex-col items-center px-4">
                         <Camera className="h-16 w-16 text-red-400" />
-                        <p className="mt-4 text-red-500 text-center px-4">{cameraError}</p>
+                        <p className="mt-4 text-red-500 text-center">{cameraError}</p>
                         <Button
                           onClick={() => {
                             setCameraError(null)
@@ -400,18 +500,31 @@ export default function VerifyPage() {
                         >
                           Try Again
                         </Button>
+                        <Button
+                          onClick={() => setActiveTab("manual")}
+                          variant="link"
+                          className="mt-2"
+                        >
+                          Use Manual Verification Instead
+                        </Button>
                       </div>
                     ) : (
-                      <div className="relative w-full h-full">
+                      <div className="relative w-full h-full bg-black">
                         <video
                           ref={videoRef}
-                          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                          style={{ 
+                            width: "100%", 
+                            height: "100%", 
+                            objectFit: "cover",
+                            transform: "scaleX(1)" // Prevent mirror effect
+                          }}
                           muted
                           playsInline
                           autoPlay
+                          webkit-playsinline="true"
                           onError={(e) => {
                             console.error("Video element error:", e)
-                            setCameraError("Failed to display camera feed")
+                            setCameraError("Failed to display camera feed. Please try again.")
                             setCameraActive(false)
                           }}
                           onLoadedData={() => {
@@ -424,9 +537,9 @@ export default function VerifyPage() {
                             <div className="w-32 h-32 border-2 border-white rounded-lg opacity-75"></div>
                           </div>
                         </div>
-                        <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2">
-                          <p className="text-white text-sm bg-black/50 px-3 py-1 rounded">
-                            Position QR code within the frame
+                        <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 bg-black/70 px-3 py-2 rounded-lg">
+                          <p className="text-white text-sm text-center">
+                            {isScanning ? "📷 Scanning... Position QR code in frame" : "⏳ Starting camera..."}
                           </p>
                         </div>
                         <Button
@@ -440,7 +553,7 @@ export default function VerifyPage() {
                       </div>
                     )
                   ) : (
-                    <div className="flex flex-col items-center">
+                    <div className="flex flex-col items-center px-4">
                       <Button
                         onClick={startCamera}
                         className="mb-4"
@@ -450,13 +563,24 @@ export default function VerifyPage() {
                         Activate Camera
                       </Button>
                       {cameraError && (
-                        <p className="text-sm text-red-500 mb-2 text-center px-4">{cameraError}</p>
+                        <p className="text-sm text-red-500 mb-2 text-center">{cameraError}</p>
                       )}
-                      <p className="text-sm text-gray-500 text-center px-4">
+                      <p className="text-sm text-gray-500 text-center">
                         {isMediaDevicesSupported === false
                           ? "Camera scanning is not supported in this browser. Please try manual verification below."
+                          : typeof window !== "undefined" && !window.isSecureContext
+                          ? "⚠️ Camera requires HTTPS connection. Use manual verification or access via https://"
                           : "Click to start scanning a QR code"}
                       </p>
+                      {isMediaDevicesSupported !== false && (
+                        <Button
+                          onClick={() => setActiveTab("manual")}
+                          variant="link"
+                          className="mt-2 text-xs"
+                        >
+                          Use Manual Verification Instead
+                        </Button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -557,3 +681,5 @@ export default function VerifyPage() {
     </div>
   )
 }
+
+//earlier 561
