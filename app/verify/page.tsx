@@ -25,72 +25,269 @@ export default function VerifyPage() {
   }>(null)
   const [cameraActive, setCameraActive] = useState(false)
   const [cameraError, setCameraError] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState("qr-code")
+  const [isMediaDevicesSupported, setIsMediaDevicesSupported] = useState<boolean | null>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
   const codeReader = useRef<BrowserQRCodeReader | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
-  const [isMediaDevicesSupported, setIsMediaDevicesSupported] = useState<boolean | null>(null)
+  const [lastScannedData, setLastScannedData] = useState<string | null>(null)
+  const [scanCooldown, setScanCooldown] = useState(false)
+  const startCamera = async () => {
+    if (isMediaDevicesSupported === false) {
+      setCameraError("Camera access is not supported in this browser. Please use manual verification.");
+      return;
+    }
+
+    setCameraError(null);
+    setCameraActive(true);
+
+    try {
+      // Try to access camera - mediaDevices might be available at runtime even if not detected initially
+      if (!navigator?.mediaDevices?.getUserMedia) {
+        throw new Error("MediaDevices API not available");
+      }
+
+      console.log("Requesting camera access...");
+      // Start with minimal constraints for better mobile compatibility
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: "environment", // Prefer back camera on mobile
+          width: { ideal: 640 },
+          height: { ideal: 480 }
+        }
+      });
+
+      console.log("Camera access granted");
+      streamRef.current = stream;
+      
+      // Log camera info for debugging
+      const videoTrack = stream.getVideoTracks()[0];
+      const settings = videoTrack.getSettings();
+      console.log("Using camera:", settings.deviceId, "Resolution:", settings.width, "x", settings.height);
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.setAttribute("playsinline", "true");
+
+        // Wait for video to be ready before starting scanning
+        await new Promise((resolve) => {
+          if (videoRef.current) {
+            videoRef.current.onloadedmetadata = () => {
+              resolve(void 0);
+            };
+          }
+        });
+
+        // Start scanning immediately
+        startScanning();
+      }
+    } catch (err: any) {
+      console.error("Camera access error:", err);
+
+      // Try with environment camera if flexible constraints fail
+      if (err.name === "OverconstrainedError" || err.name === "NotFoundError") {
+        try {
+          console.log("Trying with environment camera...");
+          const envStream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              facingMode: "environment",
+              width: { ideal: 640 },
+              height: { ideal: 480 }
+            }
+          });
+
+          console.log("Environment camera access granted");
+          streamRef.current = envStream;
+          
+          // Log camera info for debugging
+          const envVideoTrack = envStream.getVideoTracks()[0];
+          const envSettings = envVideoTrack.getSettings();
+          console.log("Using environment camera:", envSettings.deviceId, "Resolution:", envSettings.width, "x", envSettings.height);
+
+          if (videoRef.current) {
+            videoRef.current.srcObject = envStream;
+            videoRef.current.setAttribute("playsinline", "true");
+
+            await new Promise((resolve) => {
+              if (videoRef.current) {
+                videoRef.current.onloadedmetadata = () => {
+                  resolve(void 0);
+                };
+              }
+            });
+
+            // Start scanning immediately
+            startScanning();
+          }
+        } catch (envErr: any) {
+          console.error("Environment camera also failed:", envErr);
+          // Fall back to default camera
+          try {
+            console.log("Trying with default camera...");
+            const fallbackStream = await navigator.mediaDevices.getUserMedia({
+              video: {
+                width: { ideal: 640 },
+                height: { ideal: 480 }
+              }
+            });
+
+            console.log("Fallback camera access granted");
+            streamRef.current = fallbackStream;
+            
+            // Log camera info for debugging
+            const fallbackVideoTrack = fallbackStream.getVideoTracks()[0];
+            const fallbackSettings = fallbackVideoTrack.getSettings();
+            console.log("Using fallback camera:", fallbackSettings.deviceId, "Resolution:", fallbackSettings.width, "x", fallbackSettings.height);
+
+            if (videoRef.current) {
+              videoRef.current.srcObject = fallbackStream;
+              videoRef.current.setAttribute("playsinline", "true");
+
+              await new Promise((resolve) => {
+                if (videoRef.current) {
+                  videoRef.current.onloadedmetadata = () => {
+                    resolve(void 0);
+                  };
+                }
+              });
+
+              // Start scanning immediately
+              startScanning();
+            }
+          } catch (fallbackErr: any) {
+            console.error("Fallback camera also failed:", fallbackErr);
+            // Final attempt with minimal constraints for mobile compatibility
+            try {
+              console.log("Trying with minimal constraints...");
+              const minimalStream = await navigator.mediaDevices.getUserMedia({
+                video: true // Minimal constraints
+              });
+
+              console.log("Minimal camera access granted");
+              streamRef.current = minimalStream;
+
+              // Log camera info for debugging
+              const minimalVideoTrack = minimalStream.getVideoTracks()[0];
+              const minimalSettings = minimalVideoTrack.getSettings();
+              console.log("Using minimal camera:", minimalSettings.deviceId, "Resolution:", minimalSettings.width, "x", minimalSettings.height);
+
+              if (videoRef.current) {
+                videoRef.current.srcObject = minimalStream;
+                videoRef.current.setAttribute("playsinline", "true");
+
+                await new Promise((resolve) => {
+                  if (videoRef.current) {
+                    videoRef.current.onloadedmetadata = () => {
+                      resolve(void 0);
+                    };
+                  }
+                });
+
+                // Start scanning immediately
+                startScanning();
+              }
+            } catch (minimalErr: any) {
+              console.error("Minimal camera also failed:", minimalErr);
+              setCameraError(
+                minimalErr.name === "NotAllowedError"
+                  ? "Camera access denied. Please allow camera access in your browser settings and try again."
+                  : minimalErr.name === "NotFoundError"
+                  ? "No camera found on this device. Please use manual verification."
+                  : "Failed to access camera. Please use manual verification below."
+              );
+              setCameraActive(false);
+            }
+          }
+        }
+      } else {
+        const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ||
+          window.location.hostname.match(/^(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)/) ||
+          /^\d+\.\d+\.\d+\.\d+$/.test(window.location.hostname); // Any IP address
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+        setCameraError(
+          err.message === "MediaDevices API not available"
+            ? "Camera access requires a modern browser. Please update your browser or use manual verification below."
+            : err.name === "NotAllowedError"
+            ? "Camera access denied. Please allow camera access in your browser settings and try again."
+            : err.name === "NotFoundError"
+            ? "No camera found on this device. Please use manual verification below."
+            : isLocalhost && isMobile && (err.name === "NotSupportedError" || err.message.includes("HTTPS"))
+            ? "For local development on mobile, try accessing via 'localhost' instead of IP address, or use manual verification below."
+            : "Failed to access camera. Please use manual verification below."
+        );
+        setCameraActive(false);
+      }
+    }
+  };
+
+  const stopCamera = () => {
+    console.log("Stopping camera...");
+    setCameraActive(false);
+    setCameraError(null);
+    setScanResult("");
+    setLastScannedData(null);
+    setScanCooldown(false);
+    if (codeReader.current) {
+      codeReader.current.reset();
+    }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+  };
+
+  // Cleanup only when camera is explicitly deactivated (not on initial render)
+  useEffect(() => {
+    let timeoutId: NodeJS.Timeout;
+    if (!cameraActive && streamRef.current) {
+      // Small delay to avoid interrupting initial setup
+      timeoutId = setTimeout(() => {
+        stopCamera();
+      }, 100);
+    }
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [cameraActive]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      stopCamera();
+    };
+  }, []);
+
+  // Stop camera when switching away from QR tab
+  useEffect(() => {
+    if (activeTab !== "qr-code" && cameraActive) {
+      stopCamera();
+    }
+  }, [activeTab, cameraActive]);
 
   // Check for MediaDevices support on mount
   useEffect(() => {
     if (typeof window !== "undefined") {
-      setIsMediaDevicesSupported(!!navigator?.mediaDevices && !!navigator?.mediaDevices.getUserMedia);
+      const hasMediaDevices = !!navigator?.mediaDevices && !!navigator?.mediaDevices.getUserMedia;
+      const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ||
+        window.location.hostname.match(/^(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)/) ||
+        /^\d+\.\d+\.\d+\.\d+$/.test(window.location.hostname); // Any IP address
+
+      // For development, always allow camera access attempts on localhost/local networks
+      // Some mobile browsers may have MediaDevices available at runtime even if not detected initially
+      setIsMediaDevicesSupported(hasMediaDevices || isLocalhost);
     }
   }, []);
 
-  // Initialize QR code reader and handle camera permissions
+  // Initialize QR code reader on mount
   useEffect(() => {
-    if (isMediaDevicesSupported === null) return; // Wait for check
-
-    if (!isMediaDevicesSupported) {
-      console.log("MediaDevices API is not supported in this browser");
-      setCameraError("Camera access is not supported in this browser. Please use a modern browser like Chrome, Edge, or Safari, or try manual verification.");
-      setCameraActive(false);
-      return;
-    }
-
     codeReader.current = new BrowserQRCodeReader();
-
-    if (cameraActive && videoRef.current) {
-      console.log("Requesting camera access...");
-      navigator.mediaDevices
-        .getUserMedia({ video: { facingMode: "environment" } })
-        .then((stream) => {
-          console.log("Camera access granted");
-          streamRef.current = stream;
-          if (videoRef.current) {
-            videoRef.current.srcObject = stream;
-            videoRef.current.play().catch((err) => {
-              console.error("Error playing video:", err);
-              setCameraError("Failed to start camera: " + err.message);
-              setCameraActive(false);
-            });
-            startScanning();
-          }
-        })
-        .catch((err) => {
-          console.error("Camera access error:", err);
-          setCameraError(
-            err.name === "NotAllowedError"
-              ? "Camera access denied. Please allow camera access in your browser or device settings."
-              : err.name === "NotFoundError"
-              ? "No camera found on this device. Please use manual verification."
-              : "Failed to access camera: " + err.message
-          );
-          setCameraActive(false);
-        });
-    }
-
     return () => {
-      console.log("Cleaning up QR code reader");
-      if (cameraActive && codeReader.current) {
+      if (codeReader.current) {
         codeReader.current.reset();
       }
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((track) => track.stop());
-        streamRef.current = null;
-      }
     };
-  }, [cameraActive, isMediaDevicesSupported]);
+  }, []);
 
   const startScanning = async () => {
     if (!codeReader.current || !videoRef.current) {
@@ -103,14 +300,14 @@ export default function VerifyPage() {
     console.log("Starting QR code scanning...");
     try {
       await codeReader.current.decodeFromVideoDevice(
-        undefined,
+        null,
         videoRef.current,
         (result, error) => {
           if (result) {
             console.log("QR code scanned:", result.getText());
             handleScan(result.getText());
           }
-          if (error && error.name !== "StreamError") {
+          if (error && error.name !== "StreamError" && error.name !== "NotFoundException" && error.name !== "ChecksumException" && error.name !== "FormatException") {
             console.error("QR scan error:", error);
             setCameraError("QR scan error: " + error.message);
             setCameraActive(false);
@@ -157,28 +354,71 @@ export default function VerifyPage() {
   };
 
   const handleScan = async (data: string | null) => {
-    if (data) {
-      console.log("Processing scanned QR code:", data);
-      setScanResult(data);
-      setCameraActive(false);
+    if (!data || data.trim() === "" || scanCooldown || data === lastScannedData) {
+      console.log("Ignoring duplicate or empty QR code scan");
+      return;
+    }
 
-      // Extract affidavit ID from QR code URL
-      const idMatch = data.match(/\/verify\/([a-zA-Z0-9-]+)/);
-      if (idMatch && idMatch[1]) {
-        setAffidavitId(idMatch[1]);
-        console.log("Extracted affidavit ID:", idMatch[1]);
+    console.log("Processing scanned QR code:", data);
+    setScanResult(data);
+    setLastScannedData(data);
+    setScanCooldown(true);
 
-        // Auto-verify after scan
-        setIsVerifying(true);
-        try {
+    // Reset cooldown after 3 seconds
+    setTimeout(() => {
+      setScanCooldown(false);
+      setLastScannedData(null);
+    }, 3000);
+
+    // Extract affidavit ID from QR code URL - handle multiple formats
+    let extractedId = null;
+
+    try {
+      // Try different patterns to extract the ID
+      const patterns = [
+        /\/affidavit\/([a-zA-Z0-9-]+)/,  // /affidavit/AFF-2025-12345
+        /\/verify\/([a-zA-Z0-9-]+)/,     // /verify/AFF-2025-12345
+        /^([a-zA-Z0-9-]+)$/,             // Just the ID: AFF-2025-12345
+      ];
+
+      for (const pattern of patterns) {
+        const match = data.match(pattern);
+        if (match && match[1]) {
+          extractedId = match[1];
+          break;
+        }
+      }
+    } catch (extractError) {
+      console.error("Error extracting ID from QR code:", extractError);
+      setCameraError("Invalid QR code format. Please ensure you're scanning a valid AffidBlock affidavit QR code.");
+      
+      // Stop camera on invalid format
+      setTimeout(() => {
+        stopCamera();
+      }, 2000); // Longer delay to show the error message
+      return;
+    }
+
+    if (extractedId) {
+      setAffidavitId(extractedId);
+      console.log("Extracted affidavit ID:", extractedId);
+
+      // Auto-verify after scan
+      setIsVerifying(true);
+      try {
           const response = await fetch("/api/affidavits/verify", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ id: idMatch[1] }),
+            body: JSON.stringify({ id: extractedId }),
           });
           const result = await response.json();
           console.log("Verification result from QR scan:", result);
           setVerificationResult(result);
+          
+          // Stop camera after successful verification
+          setTimeout(() => {
+            stopCamera();
+          }, 1000); // Small delay to show the result
         } catch (error) {
           console.error("Verification error from QR scan:", error);
           setVerificationResult({
@@ -188,13 +428,22 @@ export default function VerifyPage() {
             blockchainData: null,
             error: "Failed to verify affidavit",
           });
+          
+          // Stop camera on error too
+          setTimeout(() => {
+            stopCamera();
+          }, 1000);
         } finally {
           setIsVerifying(false);
         }
-      } else {
-        console.log("Invalid QR code format");
-        setCameraError("Invalid QR code format");
-      }
+    } else {
+      console.log("Could not extract affidavit ID from QR code:", data);
+      setCameraError("Invalid QR code format. Please ensure you're scanning a valid AffidBlock affidavit QR code.");
+      
+      // Stop camera on invalid format
+      setTimeout(() => {
+        stopCamera();
+      }, 2000); // Longer delay to show the error message
     }
   };
 
@@ -208,7 +457,7 @@ export default function VerifyPage() {
           </p>
         </div>
 
-        <Tabs defaultValue="qr-code" className="w-full">
+        <Tabs defaultValue="qr-code" className="w-full" onValueChange={setActiveTab}>
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="qr-code" className="flex items-center gap-2">
               <QrCode className="h-4 w-4" />
@@ -226,6 +475,11 @@ export default function VerifyPage() {
                 <CardTitle>Scan QR Code</CardTitle>
                 <CardDescription>
                   Point your camera at the QR code on the affidavit to verify its authenticity
+                  {/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator?.userAgent || '') && (
+                    <span className="block mt-2 text-sm text-green-600">
+                      📱 Mobile device detected. Camera access optimized for local development.
+                    </span>
+                  )}
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -235,31 +489,82 @@ export default function VerifyPage() {
                       <div className="flex flex-col items-center">
                         <Camera className="h-16 w-16 text-red-400" />
                         <p className="mt-4 text-red-500">{cameraError}</p>
+                        <Button
+                          onClick={() => setCameraActive(false)}
+                          variant="outline"
+                          className="mt-4"
+                        >
+                          Try Again
+                        </Button>
                       </div>
                     ) : (
-                      <video ref={videoRef} style={{ width: "100%", height: "100%" }} />
+                      <div className="relative w-full h-full">
+                        <video
+                          ref={videoRef}
+                          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                          muted
+                          playsInline
+                          onError={(e) => {
+                            console.error("Video element error:", e);
+                            setCameraError("Failed to display camera feed");
+                            setCameraActive(false);
+                          }}
+                          onLoadedData={() => {
+                            console.log("Video loaded successfully");
+                          }}
+                        />
+                        <div className="absolute inset-0 border-2 border-dashed border-white/50 rounded-lg pointer-events-none">
+                          <div className="absolute inset-4 border-2 border-dashed border-white/30 rounded-lg"></div>
+                          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
+                            <div className="w-32 h-32 border-2 border-white rounded-lg opacity-75"></div>
+                          </div>
+                        </div>
+                        <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2">
+                          <p className="text-white text-sm bg-black/50 px-3 py-1 rounded">
+                            Position QR code within the frame
+                          </p>
+                        </div>
+                        <Button
+                          onClick={stopCamera}
+                          variant="secondary"
+                          size="sm"
+                          className="absolute top-2 right-2"
+                        >
+                          Stop Camera
+                        </Button>
+                      </div>
                     )
                   ) : (
                     <div className="flex flex-col items-center">
                       <Button
-                        onClick={() => setCameraActive(true)}
+                        onClick={startCamera}
                         className="mb-4"
                         disabled={isMediaDevicesSupported === false}
                       >
+                        <Camera className="mr-2 h-4 w-4" />
                         Activate Camera
                       </Button>
+                      {cameraError && (
+                        <p className="text-sm text-red-500 mb-2">{cameraError}</p>
+                      )}
                       <p className="text-sm text-gray-500">
                         {isMediaDevicesSupported === false
-                          ? "Camera scanning is not supported in this browser"
+                          ? "Camera scanning is not supported in this browser. Please try manual verification below."
+                          : /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) &&
+                            (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ||
+                            window.location.hostname.match(/^(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)/) ||
+                            /^\d+\.\d+\.\d+\.\d+$/.test(window.location.hostname))
+                          ? "Local development: Camera access enabled for testing on mobile"
                           : "Click to start scanning a QR code"}
                       </p>
                     </div>
                   )}
                 </div>
                 {scanResult && (
-                  <div className="mt-4 p-3 bg-gray-100 rounded-md">
-                    <p className="text-sm font-medium">Scan Result:</p>
-                    <p className="text-sm text-gray-600 truncate">{scanResult}</p>
+                  <div className="mt-4 p-3 bg-green-100 border border-green-200 rounded-md">
+                    <p className="text-sm font-medium text-green-800">✓ QR Code Scanned Successfully!</p>
+                    <p className="text-sm text-green-600 truncate">Processing: {scanResult}</p>
+                    <p className="text-xs text-green-500 mt-1">Camera will stop automatically after verification</p>
                   </div>
                 )}
               </CardContent>
@@ -352,7 +657,3 @@ export default function VerifyPage() {
     </div>
   )
 }
-
-
-
-//earlier 354 lines 

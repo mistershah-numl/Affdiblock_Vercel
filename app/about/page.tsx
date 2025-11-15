@@ -45,7 +45,7 @@ export default function AboutPage() {
                 <div className="absolute -inset-1 bg-gradient-to-r from-purple-600 to-blue-600 rounded-lg blur opacity-25"></div>
                 <div className="relative bg-white dark:bg-gray-900 p-6 rounded-lg shadow-xl">
                   <img
-                    src="/placeholder.svg?height=400&width=600&text=AffidBlock+Team"
+                    src="/our-story-about.png?height=400&width=600&text=AffidBlock+Team"
                     alt="AffidBlock Team"
                     className="w-full h-auto rounded-lg"
                   />
@@ -133,28 +133,28 @@ export default function AboutPage() {
           <div className="grid md:grid-cols-3 gap-8">
             {[
               {
-                name: "Sarah Johnson",
-                role: "CEO & Co-Founder",
-                image: "/placeholder.svg?height=300&width=300",
-                bio: "Former legal tech executive with 15+ years of experience in the industry.",
+                name: "Muhammad Shah",
+                role: "CEO & Co-Founder AffidBlock",
+                image: "/M-Shah.png?height=300&width=300",
+                bio: "Former legal tech executive and Full Stack Developer 15+ years of experience in the industry.",
               },
               {
-                name: "Michael Chen",
-                role: "CTO & Co-Founder",
-                image: "/placeholder.svg?height=300&width=300",
-                bio: "Blockchain expert with a background in cryptography and secure systems.",
-              },
-              {
-                name: "Aisha Patel",
-                role: "Chief Legal Officer",
-                image: "/placeholder.svg?height=300&width=300",
+                name: "Mehwish Sabih",
+                role: "Supervisor",
+                image: "/MehwishSabih.png?height=300&width=300",
                 bio: "Experienced attorney specializing in digital law and legal documentation.",
+              },
+              {
+                name: "Dr. Zia ur Rehman",
+                role: "Panel Head NUML",
+                image: "/DrZia.png?height=300&width=300",
+                bio: "Blockchain expert with a background in cryptography and secure systems.",
               },
             ].map((member, index) => (
               <Card key={index} className="border-none shadow-lg overflow-hidden">
                 <div className="aspect-square relative">
                   <img
-                    src={`/placeholder.svg?height=300&width=300&text=${member.name.replace(" ", "+")}`}
+                    src={member.image}
                     alt={member.name}
                     className="w-full h-full object-cover"
                   />

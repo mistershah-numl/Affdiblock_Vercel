@@ -35,14 +35,11 @@ export default function Home() {
             </div>
             <div className="flex items-center justify-center">
               <div className="relative w-full max-w-md">
-                <div className="absolute -inset-0.5 bg-gradient-to-r from-pink-500 to-purple-500 rounded-lg blur opacity-75"></div>
-                <div className="relative bg-white p-6 rounded-lg shadow-xl">
-                  <img
-                    src="/placeholder.svg?height=300&width=400"
-                    alt="AffidBlock Platform"
-                    className="w-full h-auto rounded"
-                  />
-                </div>
+                <img
+                  src="/shield-hero-sec.png?height=300&width=400"
+                  alt="AffidBlock Platform"
+                  className="w-full h-auto"
+                />
               </div>
             </div>
           </div>
