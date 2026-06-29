@@ -146,7 +146,7 @@ Fork, branch, commit, push, and open a PR. Run pnpm lint (or npm run lint) befor
 
 ## License
 
-This project is licensed under the MIT License — add a LICENSE file if missing.
+This project is licensed under the MIT License.
 
 ---
 
