@@ -146,8 +146,9 @@ Fork, branch, commit, push, and open a PR. Run pnpm lint (or npm run lint) befor
 
 ## License
 
-This project is licensed under the MIT License.
+Copyright © 2026 Muhammad Shah. All Rights Reserved.
 
+This repository is made publicly available for demonstration and portfolio purposes only. Viewing the source code does not grant permission to copy, modify, redistribute, or use any part of this project without prior written permission from the author.
 ---
 
 *Last Updated: November 05, 2025*
